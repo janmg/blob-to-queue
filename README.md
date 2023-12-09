@@ -11,4 +11,4 @@ My problem with JAVA is the Oracle licensing requirements per JVM and they requi
 nsgflowlogs are events, it would make more sense to me to have them available in an eventhub. An eventhub is an AMPQ / Kafka compatible queueing broker. This program will read from the files that are written every minute and add them as a batch to an output stream. I focus first on writing it to an eventhub, because it is available in Azure. Other output formats are planned are native kafka and amqp and maybe mqtt or any.
 
 # flatevents
-The original nsgflowlogs are nested, the nsgflowlog logic will flatten the logic so each is a standalone json event.
+The original nsgflowlogs are nested, the nsgflowlog logic will flatten the logic to make each log entry a standalone json event.
