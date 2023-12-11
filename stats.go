@@ -1,25 +1,43 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+)
 
 type summary struct {
 	unixtime int
-	socket   string
 	inbytes  int
 	outbytes int
 	inpack   int
 	outpack  int
 }
 
-func statistics(time int, proto string, state string, direction string, src string, dst string) {
+func statistics(nsg flatevent) {
+	unix, err := strconv.Atoi(nsg.Unixtime)
+	handleError(err)
 	stats := make(map[string]summary) // K socket, V summary
-	socket := proto + "/" + src + "-" + dst
-	if direction == "O" {
-		socket = proto + "/" + dst + "-" + src
+
+	src := nsg.SrcIP + "_" + nsg.SrcPort
+	dst := nsg.DstIP + "_" + nsg.DstPort
+
+	socket := nsg.Proto + "/" + src + "-" + dst
+	outbytes := nsg.SrcBytes
+	inbytes := nsg.DstBytes
+	outpack := nsg.SrcPackets
+	inpack := nsg.DstPackets
+
+	if nsg.Direction == "O" {
+		socket = nsg.Proto + "/" + dst + "-" + src
+		inbytes = nsg.SrcBytes
+		outbytes = nsg.DstBytes
+		inpack = nsg.SrcPackets
+		outpack = nsg.DstPackets
 	}
 
-	if proto == "T" {
-		if state == "B" {
+	// be more clever when it comes to TCP with B,x,E packets and UDP, and the deal with socket timeout?
+	if nsg.Proto == "T" {
+		if nsg.State == "B" {
 			stats[socket] = summary{}
 		} else {
 			// find socket from map
@@ -29,25 +47,25 @@ func statistics(time int, proto string, state string, direction string, src stri
 			} else {
 				// not B and not found ... mmh
 				stats[socket] = summary{}
+				stats[socket] = summary{unix, stats[socket].inbytes + inbytes, stats[socket].outbytes + outbytes, stats[socket].inpack + inpack, stats[socket].outpack + outpack}
 				fmt.Println(fmt.Sprintf("not B and not previously found? %s", socket))
 			}
-
 		}
 		// lookup from map src+"-"+dst and dst+"-"+src, check time
 	}
 
-	if proto == "U" {
+	if nsg.Proto == "U" {
 		// lookup from map src+"-"+dst and dst+"-"+src, check time
 		_, found := stats[socket]
 		if !found {
-			//stats[socket] = summary{time, socket, inbytes, outbytes, inpack, outpack}
+			stats[socket] = summary{unix, 0, 0, 0, 0}
+		} else {
+			// if unix is expired?
+			stats[socket] = summary{unix, stats[socket].inbytes + inbytes, stats[socket].outbytes + outbytes, stats[socket].inpack + inpack, stats[socket].outpack + outpack}
 		}
 		// if new add src+"-"+dst to map
 	}
-	if direction == "I" {
-		// add src byte and packs to incoming
-		// add dst byte and packs to outgoing
-	}
+
 	// save packets to map
 	// keep timer to find expired connections?
 	/*

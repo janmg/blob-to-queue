@@ -20,34 +20,43 @@ type output struct {
 	format  string
 }
 
+var blob Blob
+
+type IBlob interface {
+	Print()
+}
+
 func configHandler() Blob {
 	// https://github.com/spf13/viper#watching-and-re-reading-config-files
 	var conf = viper.New()
-	conf.SetConfigFile("blob-to-kafka.yaml")
+	conf.SetConfigFile("blob-to-queue.yaml")
 	conf.SetConfigType("yaml")
 	conf.AddConfigPath(".")
 	err := conf.ReadInConfig()
 	handleError(err)
-	var blob Blob
-	conf.Unmarshal(&blob)
-	handleError(err)
 
+	conf.Unmarshal(&blob)
 	blob.Cloud = "blob.core.windows.net"
 
 	viper.WatchConfig()
 	if viper.GetBool("fsnotify") {
 		viper.OnConfigChange(func(e fsnotify.Event) {
 			fmt.Println("Config file changed:", e.Name)
-			blob.Accountname = viper.GetString("accountName")
-			blob.Accountkey = viper.GetString("accountKey")
-			blob.ContainerName = viper.GetString("containerName")
-			blob.Cloud = viper.GetString("cloud")
+			conf.Unmarshal(&blob)
 			lookup = nil
 			lookup = append(lookup, output{"stdout", "", "Flat"})
 			lookup = append(lookup, output{"summary", "", "Flat"})
 			lookup = append(lookup, output{"azurehub", viper.GetString("eventhub.connectionString"), viper.GetString("eventhub.format")})
 		})
 	}
-
+	//var blob Blob = Blob{"hello", "hello", "hello", "hello"}
+	blob.Print()
 	return blob
+}
+
+func (blob Blob) Print() {
+	fmt.Println(blob.Accountname)
+	fmt.Println(blob.Accountkey)
+	fmt.Println(blob.ContainerName)
+	fmt.Println(blob.Cloud)
 }

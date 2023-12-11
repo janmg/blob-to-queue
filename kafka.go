@@ -2,23 +2,30 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"log"
 
 	"github.com/segmentio/kafka-go"
 )
 
-func sendKafka(nsg string) {
+func sendKafka(nsg flatevent) {
 	fmt.Println("Kafka sending")
 	topic := "insights-logs-networksecuritygroupflowevent"
 	partition := 0
 
-	conn, err := kafka.DialLeader(context.Background(), "tcp", "localhost:9092", topic, partition)
-	if err != nil {
-		log.Fatal("failed to dial leader:", err)
-	}
+	kfk, err := kafka.DialLeader(context.Background(), "tcp", "localhost:9092", topic, partition)
+	handleError(err)
 
-	if err := conn.Close(); err != nil {
-		log.Fatal("failed to close writer:", err)
-	}
+	nsgjson, err := json.Marshal(nsg)
+	handleError(err)
+	fmt.Println(string(nsgjson))
+
+	_, err = kfk.WriteMessages(kafka.Message{
+		Value: nsgjson,
+	},
+	)
+	handleError(err)
+
+	err = kfk.Close()
+	handleError(err)
 }

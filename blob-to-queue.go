@@ -33,11 +33,12 @@ var lookup []output
 
 func main() {
 	fmt.Printf("NSGFLOWLOG\n")
+	//var blob IBlob = configHandler()
+	//blob.Print()
 
-	queue := make(chan flatevent, 1000)
-	go worker(queue)
+	queue := make(chan flatevent, 10000)
+	go blobworker(queue)
 	send(queue)
-
 }
 
 func send(queue <-chan flatevent) {
@@ -45,44 +46,21 @@ func send(queue <-chan flatevent) {
 	//csv:=
 	//ecs:=
 	nsg := <-queue
-	sendAzure(nsg)
-	/*
-		output := "eventhub"
-		switch output {
-		case "eventhub":
-			sendAzure(nsg)
-			case "kafka":
-				sendKafka(nsg)
-			case "mqtt":
-				sendMQTT(nsg)
-			case "ampq":
-				sendAMPQ(nsg)
-			case "file":
-				appendFile(nsg)
-			case "stdout":
-				stdout(nsg)
-			case "summary":
-				summary(nsg)
-		}
-	*/
-}
-
-func sendAMPQ(nsg string) {
-	fmt.Println("AMPQ sending")
-}
-
-func sendMQTT(nsg string) {
-	fmt.Println("MQTT sending")
-}
-
-func appendFile(nsg string) {
-	fmt.Println(nsg)
-}
-
-func stdout(nsg string) {
-	fmt.Println(nsg)
-}
-
-func sumout(nsg string) {
-	fmt.Println(nsg)
+	output := "eventhub"
+	switch output {
+	case "eventhub":
+		sendAzure(nsg)
+	case "kafka":
+		sendKafka(nsg)
+	case "mqtt":
+		sendMQTT(nsg)
+	case "ampq":
+		sendAMPQ(nsg)
+	case "file":
+		appendFile(nsg)
+	case "stdout":
+		stdout(nsg)
+	case "summary":
+		statistics(nsg)
+	}
 }

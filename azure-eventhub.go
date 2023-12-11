@@ -14,7 +14,7 @@ func sendAzure(nsg flatevent) {
 
 	// "Endpoint=sb://nsgflowlogs.servicebus.windows.net/;SharedAccessKeyName=abc;SharedAccessKey=123"
 	// *.servicebus.chinacloudapi.cn, *.servicebus.usgovcloudapi.net, or *.servicebus.cloudapi.de
-	connectionString := "Endpoint=sb://nsgflowlogs.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=abcdefg0123456789ABCDEF="
+	connectionString := "Endpoint=sb://nsgflowlogs.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=pVYkvOFQfSLwsj8OtfyH0RTsNAv66Nbsb+AEhJMJzJw="
 	kfk, err := azeventhubs.NewProducerClientFromConnectionString(connectionString, "janmg", nil)
 	handleError(err)
 
@@ -25,10 +25,10 @@ func sendAzure(nsg flatevent) {
 	// TODO: currently serving a batch of one, need to figure out how to suck more out of the queue?
 	//err = batch.AddEventData(eventdata(nsg), nil)
 	ed := eventdata(nsg)
-	fmt.Println(ed)
 	err = batch.AddEventData(ed, nil)
 	handleError(err)
 
+	//TODO: thread and send based on time and availability
 	err = kfk.SendEventDataBatch(context.Background(), batch, nil)
 	handleError(err)
 }
