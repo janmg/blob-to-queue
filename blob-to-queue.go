@@ -19,6 +19,7 @@ reading partial blobs blocks, tracking start and end
 detecting json, nsgflowlogs
 tracking of time and read sequential file list
 printing out to stdout or logfile
+filter finegrained with if statements,=
 format events
 send to stream
 */
@@ -29,24 +30,23 @@ func handleError(err error) {
 	}
 }
 
-var lookup []output
-
 func main() {
-	fmt.Printf("NSGFLOWLOG\n")
+	fmt.Printf("blob-to-queue v1.0-dev\n")
 	//var blob IBlob = configHandler()
 	//blob.Print()
 
 	queue := make(chan flatevent, 10000)
 	go blobworker(queue)
 	send(queue)
+
+	defer close(queue)
 }
 
 func send(queue <-chan flatevent) {
-	// loop through lookup, prep desired format
-	//csv:=
-	//ecs:=
 	nsg := <-queue
-	output := "eventhub"
+	// filter?
+	//TODO hardcoded output, replace with configHandler info
+	output := "stdout"
 	switch output {
 	case "eventhub":
 		sendAzure(nsg)

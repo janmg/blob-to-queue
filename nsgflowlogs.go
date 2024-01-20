@@ -58,56 +58,6 @@ type flatevent struct {
 	DstBytes      int       `json:"dstbytes"`
 }
 
-// struct for outputting in Logstash ECS format
-type ecsevent struct {
-	/*      Ecs struct {
-	                Version string `json:"version"`
-	        } string `json:"ecs"`
-	        ...
-
-	        // https://www.elastic.co/guide/en/ecs/current/ecs-field-reference.html
-	        ecs.set("ecs.version", "1.0.0")
-	        ecs.set("@timestamp", old.timestamp)
-	        ecs.set("cloud.provider", "azure")
-	        ecs.set("cloud.account.id", old.get("[subscription]")
-	        ecs.set("cloud.project.id", old.get("[environment]")
-	        ecs.set("file.name", old.get("[filename]")
-	        ecs.set("event.category", "network")
-	        if old.get("[decision]") == "D"
-	            ecs.set("event.type", "denied")
-	        else
-	            ecs.set("event.type", "allowed")
-	        end
-	        ecs.set("event.action", "")
-	        ecs.set("rule.ruleset", old.get("[nsg]")
-	        ecs.set("rule.name", old.get("[rule]")
-	        ecs.set("trace.id", old.get("[protocol]")+"/"+old.get("[src_ip]")+":"+old.get("[src_port]")+"-"+old.get("[dst_ip]")+":"+old.get("[dst_port]")
-	        # requires logic to match sockets and flip src/dst for outgoing.
-	        ecs.set("host.mac", old.get("[mac]")
-	        ecs.set("source.ip", old.get("[src_ip]")
-	        ecs.set("source.port", old.get("[src_port]")
-	        ecs.set("source.bytes", old.get("[srcbytes]")
-	        ecs.set("source.packets", old.get("[src_pack]")
-	        ecs.set("destination.ip", old.get("[dst_ip]")
-	        ecs.set("destination.port", old.get("[dst_port]")
-	        ecs.set("destination.bytes", old.get("[dst_bytes]")
-	        ecs.set("destination.packets", old.get("[dst_packets]")
-	        if old.get("[protocol]") = "U"
-	            ecs.set("network.transport", "udp")
-	        else
-	            ecs.set("network.transport", "tcp")
-	        end
-	        if old.get("[decision]") == "I"
-	            ecs.set("network.direction", "incoming")
-	        else
-	            ecs.set("network.direction", "outgoing")
-	        end
-	        ecs.set("network.bytes", old.get("[src_bytes]")+old.get("[dst_bytes]")
-	        ecs.set("network.packets", old.get("[src_packets]")+old.get("[dst_packets]")
-	        return ecs
-	*/
-}
-
 func nsgflowlog(queue chan<- flatevent, flowlogs []byte, blobname string) {
 	count := 0
 
@@ -129,7 +79,7 @@ func nsgflowlog(queue chan<- flatevent, flowlogs []byte, blobname string) {
 				event.Mac = flow.Mac
 				for _, tuples := range flow.FlowTuples {
 					event = addtuples(event, tuples)
-					fmt.Println(tuples)
+					//fmt.Println(tuples)
 					queue <- event
 					// do some wait event if channel is full?
 					count++
@@ -156,7 +106,7 @@ func addtuples(event flatevent, nsgflow string) flatevent {
 		event.DstPackets = zeroIfEmpty(tups[11])
 		event.DstBytes = zeroIfEmpty(tups[12])
 	}
-	// nice moment to keep some socket statistics
+	// TODO nice moment to keep some socket statistics? now doing some in stats and in ecs?
 	// socket(src_ip-src_port+dst_port-dst_port, begintime, src_packets, src_bytes, dst_packets, dst_bytes)
 	return event
 }

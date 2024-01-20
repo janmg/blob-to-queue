@@ -14,9 +14,13 @@ func sendAzure(nsg flatevent) {
 
 	// "Endpoint=sb://nsgflowlogs.servicebus.windows.net/;SharedAccessKeyName=abc;SharedAccessKey=123"
 	// *.servicebus.chinacloudapi.cn, *.servicebus.usgovcloudapi.net, or *.servicebus.cloudapi.de
-	connectionString := "Endpoint=sb://nsgflowlogs.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=pVYkvOFQfSLwsj8OtfyH0RTsNAv66Nbsb+AEhJMJzJw="
+
+	// TODO: Make into a config item ...
+	connectionString := "Endpoint=sb://<<eventhubname>>.servicebus.windows.net/;SharedAccessKeyName=nsgflowlogs;SharedAccessKey=<<sharedkey>>"
 	kfk, err := azeventhubs.NewProducerClientFromConnectionString(connectionString, "janmg", nil)
 	handleError(err)
+	// after removing the eventhub, this is the error
+	// 2024/01/20 13:30:13 (connlost): dial tcp: lookup nsgflowlogs.servicebus.windows.net: no such host
 
 	defer kfk.Close(context.TODO())
 

@@ -35,6 +35,8 @@ func statistics(nsg flatevent) {
 		outpack = nsg.DstPackets
 	}
 
+	// 1698775873,10.0.0.4,52.239.137.164,57756,443,T,O,A,B,,,,
+	// 1698775879,10.0.0.4,52.239.137.164,57756,443,T,O,A,E,8,1474,18,18980
 	// be more clever when it comes to TCP with B,x,E packets and UDP, and the deal with socket timeout?
 	if nsg.Proto == "T" {
 		if nsg.State == "B" {
@@ -48,7 +50,7 @@ func statistics(nsg flatevent) {
 				// not B and not found ... mmh
 				stats[socket] = summary{}
 				stats[socket] = summary{unix, stats[socket].inbytes + inbytes, stats[socket].outbytes + outbytes, stats[socket].inpack + inpack, stats[socket].outpack + outpack}
-				fmt.Println(fmt.Sprintf("not B and not previously found? %s", socket))
+				fmt.Printf(fmt.Sprintf("out of sync? no previous packet captured and not previously found? %s\n", socket))
 			}
 		}
 		// lookup from map src+"-"+dst and dst+"-"+src, check time
