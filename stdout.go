@@ -6,5 +6,5 @@ import (
 
 // TODO hardcoded format, replace with configHandler info
 func stdout(nsg flatevent) {
-	fmt.Println(format("csv", nsg))
+	fmt.Print(format("csv", nsg))
 }

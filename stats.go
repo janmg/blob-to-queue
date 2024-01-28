@@ -15,7 +15,7 @@ type summary struct {
 
 func statistics(nsg flatevent) {
 	unix, err := strconv.Atoi(nsg.Unixtime)
-	handleError(err)
+	Error(err)
 	stats := make(map[string]summary) // K socket, V summary
 
 	src := nsg.SrcIP + "_" + nsg.SrcPort

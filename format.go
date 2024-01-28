@@ -31,8 +31,8 @@ func format_csv(nsg flatevent) string {
 	// https://github.com/gocarina/gocsv/blob/master/csv.go
 	nsgs := []*flatevent{}
 	nsgs = append(nsgs, &nsg)
-	csvContent, err := gocsv.MarshalString(&nsgs)
-	handleError(err)
+	csvContent, err := gocsv.MarshalStringWithoutHeaders(&nsgs)
+	Error(err)
 	return csvContent
 }
 

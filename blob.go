@@ -6,16 +6,15 @@ import (
 	"fmt"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 )
 
 func blobworker(queue chan flatevent) {
 	config := configHandler()
 
 	cred, err := azblob.NewSharedKeyCredential(config.Accountname, config.Accountkey)
-	handleError(err)
+	Error(err)
 	client, err := azblob.NewClientWithSharedKeyCredential(fmt.Sprintf("https://%s.%s/", config.Accountname, config.Cloud), cred, nil)
-	handleError(err)
+	Error(err)
 
 	// List the blobs in the container
 	fmt.Println("Listing the blobs in the container:")
@@ -45,52 +44,92 @@ func blobworker(queue chan flatevent) {
 	*/
 	for pager.More() {
 		resp, err := pager.NextPage(context.TODO())
-		handleError(err)
+		Error(err)
 
 		for _, blob := range resp.Segment.BlobItems {
+			// TODO: this filter could keep track of the last file being read, but what about partial reads.
+			// Needs tracking of which files were read, for flowlogs should use the date/time in the directory structure, only need to remember last processed file
 			if *blob.Name > "resourceId=/SUBSCRIPTIONS/F5DD6E2D-1F42-4F54-B3BD-DBF595138C59/RESOURCEGROUPS/VM/PROVIDERS/MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/OCTOBER-NSG/y=2023/m=10/d=31/h=18/m=00" {
 				fmt.Println(*blob.Name)
-				blobURL := fmt.Sprintf("https://%s.%s/%s/%s", config.Accountname, config.Cloud, config.ContainerName, *blob.Name)
-				blockBlobClient, err := blockblob.NewClientWithSharedKeyCredential(blobURL, cred, nil)
-				handleError(err)
-
-				// ListBlockBlob
-				blockList, err := blockBlobClient.GetBlockList(context.Background(), blockblob.BlockListTypeAll, nil)
-				// BlockListTypeCommitted
-				handleError(err)
-				ctx := context.Background()
-				for _, blocks := range blockList.BlockList.CommittedBlocks {
-					fmt.Println(*blocks.Name, *blocks.Size)
-					// QTAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw
-					// WjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw
-				}
-				// Needs tracking of which files were read, for flowlogs should use the date/time in the directory structure, only need to remember last processed file
-				// Needs implementation of partial reads, incase files grow
-				// Download the blob
-				/*
-					httpRange := azblob.HTTPRange{
-						Offset: 0,
-						Count:  12,
-					}
-					get, err := client.DownloadStream(ctx, config.ContainerName, *blob.Name, &azblob.DownloadStreamOptions{Range: httpRange})
-				*/
-				get, err := client.DownloadStream(ctx, config.ContainerName, *blob.Name, nil)
-				handleError(err)
-
-				downloadedData := bytes.Buffer{}
-				retryReader := get.NewRetryReader(ctx, &azblob.RetryReaderOptions{})
-				_, err = downloadedData.ReadFrom(retryReader)
-				handleError(err)
-				//fmt.Println(downloadedData.String())
-
-				err = retryReader.Close()
-				handleError(err)
-
-				// TODO: How to process lines?
-				// parse the json into a flatevent struct and push it into the queue
-				nsgflowlog(queue, downloadedData.Bytes(), *blob.Name)
+				fullRead(queue, *blob.Name)
 			}
 
 		}
 	}
+}
+
+func fullRead(queue chan flatevent, name string) {
+	config := configHandler()
+	cred, err := azblob.NewSharedKeyCredential(config.Accountname, config.Accountkey)
+	Error(err)
+
+	client, err := azblob.NewClientWithSharedKeyCredential(fmt.Sprintf("https://%s.%s/", config.Accountname, config.Cloud), cred, nil)
+	Error(err)
+
+	ctx := context.Background()
+	/*
+		// ListBlockBlob
+		blobURL := fmt.Sprintf("https://%s.%s/%s/%s", config.Accountname, config.Cloud, config.ContainerName, name)
+		blockBlobClient, err := blockblob.NewClientWithSharedKeyCredential(blobURL, cred, nil)
+		Error(err)
+
+		blockList, err := blockBlobClient.GetBlockList(context.Background(), blockblob.BlockListTypeAll, nil)
+		// BlockListTypeCommitted
+		Error(err)
+
+			for _, blocks := range blockList.BlockList.CommittedBlocks {
+				fmt.Println(*blocks.Name, *blocks.Size)
+				// QTAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw
+				// WjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw
+			}
+	*/
+
+	get, err := client.DownloadStream(ctx, config.ContainerName, name, nil)
+	Error(err)
+
+	downloadedData := bytes.Buffer{}
+	retryReader := get.NewRetryReader(ctx, &azblob.RetryReaderOptions{})
+	_, err = downloadedData.ReadFrom(retryReader)
+	Error(err)
+	//fmt.Println(downloadedData.String())
+
+	err = retryReader.Close()
+	Error(err)
+
+	// TODO: How to process lines?
+	// parse the json into a flatevent struct and push it into the queue
+	nsgflowlog(queue, downloadedData.Bytes(), name)
+}
+
+func partialRead(queue chan flatevent, name string) {
+	config := configHandler()
+	cred, err := azblob.NewSharedKeyCredential(config.Accountname, config.Accountkey)
+	Error(err)
+
+	client, err := azblob.NewClientWithSharedKeyCredential(fmt.Sprintf("https://%s.%s/", config.Accountname, config.Cloud), cred, nil)
+	Error(err)
+
+	ctx := context.Background()
+	/*
+		httpRange := azblob.HTTPRange{
+			Offset: 0,
+			Count:  12,
+		}
+		get, err := client.DownloadStream(ctx, config.ContainerName, *blob.Name, &azblob.DownloadStreamOptions{Range: httpRange})
+	*/
+	get, err := client.DownloadStream(ctx, config.ContainerName, name, nil)
+	Error(err)
+
+	downloadedData := bytes.Buffer{}
+	retryReader := get.NewRetryReader(ctx, &azblob.RetryReaderOptions{})
+	_, err = downloadedData.ReadFrom(retryReader)
+	Error(err)
+	//fmt.Println(downloadedData.String())
+
+	err = retryReader.Close()
+	Error(err)
+
+	// TODO: How to process lines?
+	// parse the json into a flatevent struct and push it into the queue
+	nsgflowlog(queue, downloadedData.Bytes(), name)
 }

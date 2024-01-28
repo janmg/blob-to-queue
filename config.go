@@ -37,7 +37,7 @@ func configHandler() Blob {
 	conf.SetConfigType("yaml")
 	conf.AddConfigPath(".")
 	err := conf.ReadInConfig()
-	handleError(err)
+	Error(err)
 
 	conf.Unmarshal(&blob)
 	blob.Cloud = "blob.core.windows.net"

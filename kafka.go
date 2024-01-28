@@ -14,18 +14,18 @@ func sendKafka(nsg flatevent) {
 	partition := 0
 
 	kfk, err := kafka.DialLeader(context.Background(), "tcp", "localhost:9092", topic, partition)
-	handleError(err)
+	Error(err)
 
 	nsgjson, err := json.Marshal(nsg)
-	handleError(err)
+	Error(err)
 	fmt.Println(string(nsgjson))
 
 	_, err = kfk.WriteMessages(kafka.Message{
 		Value: nsgjson,
 	},
 	)
-	handleError(err)
+	Error(err)
 
 	err = kfk.Close()
-	handleError(err)
+	Error(err)
 }
