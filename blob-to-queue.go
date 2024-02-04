@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 	// https://github.com/Shopify/sarama
 	// https://pkg.go.dev/github.com/twmb/kafka-go/pkg/kgo
 	// https://github.com/streadway/amqp
@@ -21,7 +22,7 @@ reading full blobs
 reading partial blobs blocks, tracking start and end
 detecting json, nsgflowlogs
 tracking of time and read sequential file list
-filter finegrained with if statements,=
+filter finegrained with if statements
 format events
 send to stream
 printing out to stdout or logfile
@@ -46,32 +47,40 @@ func main() {
 	//blob.Print()
 
 	// Shutdown handler, if stop signal comes, process last messages in the queue, but stop inflow
+	fetchmore := true
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-	done := make(chan bool, 1)
-	go func() {
-		sig := <-sigs
-		fmt.Println()
-		fmt.Println(sig)
-		done <- true
-	}()
-	fmt.Println("awaiting signal")
-	<-done
-	fmt.Println("exiting")
 
 	// Read flatevents from the blobstorage and add them to the queue
 	queue := make(chan flatevent, 10000)
-	go blobworker(queue)
-
-	// Read from the queue and decide what to do with the output
-	send(queue)
-
 	defer close(queue)
+
+	go func() {
+		sig := <-sigs
+		fmt.Println(sig)
+		fetchmore = false
+		fmt.Println("stopping after processing the last events, now in the queue: ", len(queue))
+		for len(queue) > 0 {
+			time.Sleep(10 * time.Second)
+			fmt.Println("still in the queue: ", len(queue))
+		}
+		os.Exit(99)
+	}()
+
+	for {
+		// Read flatevents from the blobstorage and add them to the queue
+		if fetchmore {
+			queue := make(chan flatevent, 10000)
+			go blobworker(queue)
+		}
+		// Read from the queue and decide what to do with the output
+		send(queue)
+	}
 }
 
 func send(queue <-chan flatevent) {
 	// TODO: Create break handler to finish the queue
-	for true {
+	for {
 		nsg := <-queue
 		// TODO: filter?
 		// TODO hardcoded output, replace with configHandler info
