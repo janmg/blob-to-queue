@@ -94,6 +94,8 @@ func send(queue <-chan flatevent) {
 			sendMQTT(nsg)
 		case "ampq":
 			sendAMPQ(nsg)
+		case "zeromq":
+			sendZERO(nsg)
 		case "file":
 			appendFile(nsg)
 		case "stdout":

@@ -13,6 +13,7 @@ func sendKafka(nsg flatevent) {
 	topic := "insights-logs-networksecuritygroupflowevent"
 	partition := 0
 
+	// TODO: use config
 	kfk, err := kafka.DialLeader(context.Background(), "tcp", "localhost:9092", topic, partition)
 	Error(err)
 

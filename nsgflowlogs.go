@@ -66,7 +66,6 @@ func nsgflowlog(queue chan<- flatevent, flowlogs []byte, blobname string) {
 	for _, elements := range nsgflowlogs.Records {
 		var event flatevent
 		event.Time = elements.Time
-		event.Version = elements.Properties.Version
 		event.SystemID = elements.SystemID
 		event.MACAdress = elements.MacAddress
 		event.Category = elements.Category
@@ -87,7 +86,7 @@ func nsgflowlog(queue chan<- flatevent, flowlogs []byte, blobname string) {
 			}
 		}
 	}
-	fmt.Println(count)
+	fmt.Println("nsgflowlog count: ", count)
 }
 func addtuples(event flatevent, nsgflow string) flatevent {
 	tups := strings.Split(nsgflow, ",")

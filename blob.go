@@ -10,10 +10,12 @@ import (
 
 func blobworker(queue chan flatevent) {
 	config := configHandler()
-
+	//print(config)
 	cred, err := azblob.NewSharedKeyCredential(config.Accountname, config.Accountkey)
 	Error(err)
-	client, err := azblob.NewClientWithSharedKeyCredential(fmt.Sprintf("https://%s.%s/", config.Accountname, config.Cloud), cred, nil)
+	location := "https://" + config.Accountname + "." + config.Cloud
+	fmt.Println(location)
+	client, err := azblob.NewClientWithSharedKeyCredential(location, cred, nil)
 	Error(err)
 
 	// List the blobs in the container
@@ -49,11 +51,13 @@ func blobworker(queue chan flatevent) {
 		for _, blob := range resp.Segment.BlobItems {
 			// TODO: this filter could keep track of the last file being read, but what about partial reads.
 			// Needs tracking of which files were read, for flowlogs should use the date/time in the directory structure, only need to remember last processed file
-			if *blob.Name > "resourceId=/SUBSCRIPTIONS/F5DD6E2D-1F42-4F54-B3BD-DBF595138C59/RESOURCEGROUPS/VM/PROVIDERS/MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/OCTOBER-NSG/y=2023/m=10/d=31/h=18/m=00" {
-				fmt.Println(*blob.Name)
-				fullRead(queue, *blob.Name)
-			}
+			/*
+				if *blob.Name > "resourceId=/SUBSCRIPTIONS/F5DD6E2D-1F42-4F54-B3BD-DBF595138C59/RESOURCEGROUPS/VM/PROVIDERS/MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/OCTOBER-NSG/y=2023/m=10/d=31/h=18/m=00" {
+					fmt.Println(*blob.Name)
 
+				}
+			*/
+			fullRead(queue, *blob.Name)
 		}
 	}
 }
@@ -62,8 +66,8 @@ func fullRead(queue chan flatevent, name string) {
 	config := configHandler()
 	cred, err := azblob.NewSharedKeyCredential(config.Accountname, config.Accountkey)
 	Error(err)
-
-	client, err := azblob.NewClientWithSharedKeyCredential(fmt.Sprintf("https://%s.%s/", config.Accountname, config.Cloud), cred, nil)
+	location := "https://" + config.Accountname + "." + config.Cloud
+	client, err := azblob.NewClientWithSharedKeyCredential(location, cred, nil)
 	Error(err)
 
 	ctx := context.Background()
@@ -106,7 +110,8 @@ func partialRead(queue chan flatevent, name string) {
 	cred, err := azblob.NewSharedKeyCredential(config.Accountname, config.Accountkey)
 	Error(err)
 
-	client, err := azblob.NewClientWithSharedKeyCredential(fmt.Sprintf("https://%s.%s/", config.Accountname, config.Cloud), cred, nil)
+	location := "https://" + config.Accountname + "." + config.Cloud
+	client, err := azblob.NewClientWithSharedKeyCredential(location, cred, nil)
 	Error(err)
 
 	ctx := context.Background()

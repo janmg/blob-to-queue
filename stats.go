@@ -16,8 +16,9 @@ type summary struct {
 func statistics(nsg flatevent) {
 	unix, err := strconv.Atoi(nsg.Unixtime)
 	Error(err)
-	stats := make(map[string]summary) // K socket, V summary
-
+	// stats must be kept globally and exported somehow?
+	var stats := make(map[string]summary) // K socket, V summary
+    // Write stats every minute to a file?
 	src := nsg.SrcIP + "_" + nsg.SrcPort
 	dst := nsg.DstIP + "_" + nsg.DstPort
 
