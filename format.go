@@ -3,11 +3,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	"github.com/gocarina/gocsv"
 )
 
-func format(format string, nsg flatevent) string {
+func format(format string, nsg Flatevent) string {
 	var formatted string
 	switch format {
 	case "csv":
@@ -20,16 +21,16 @@ func format(format string, nsg flatevent) string {
 	return formatted
 }
 
-func format_json(nsg flatevent) string {
+func format_json(nsg Flatevent) string {
 	event_json, _ := json.Marshal(nsg)
 	fmt.Print(event_json)
 	return string(event_json)
 }
 
-func format_csv(nsg flatevent) string {
+func format_csv(nsg Flatevent) string {
 	// copy from gocarina the csv reader and strip out the need for an array of structs, here I only have one event in a struct at a time and don't want the header
 	// https://github.com/gocarina/gocsv/blob/master/csv.go
-	nsgs := []*flatevent{}
+	nsgs := []*Flatevent{}
 	nsgs = append(nsgs, &nsg)
 	csvContent, err := gocsv.MarshalStringWithoutHeaders(&nsgs)
 	Error(err)
@@ -37,7 +38,7 @@ func format_csv(nsg flatevent) string {
 }
 
 // struct for outputting in Logstash ECS format
-func format_ecs(flat flatevent) string {
+func format_ecs(flat Flatevent) string {
 	// https://www.elastic.co/guide/en/ecs-logging/overview/master/intro.html
 	// https://www.elastic.co/guide/en/ecs/current/ecs-field-reference.html
 	// https://github.com/elastic/ecs/blob/main/generated/ecs/ecs_nested.yml
@@ -94,4 +95,35 @@ func format_ecs(flat flatevent) string {
 	fmt.Print(event_json)
 
 	return string(event_json)
+}
+
+func proto_to_string(proto int) string {
+	// https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml
+	switch proto {
+	case 1:
+	case 58:
+		return "I"
+	case 6:
+		return "T"
+	case 17:
+		return "U"
+	default:
+		x := strconv.Itoa(proto)
+		return x
+	}
+	return "X"
+}
+
+func proto_to_int(proto string) int {
+	// https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml
+	switch proto {
+	case "I":
+		return 58
+	case "T":
+		return 6
+	case "U":
+		return 17
+	default:
+		return 0
+	}
 }

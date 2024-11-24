@@ -4,6 +4,6 @@ import (
 	"fmt"
 )
 
-func sendMQTT(nsg flatevent) {
+func sendMQTT(nsg Flatevent) {
 	fmt.Println("MQTT sending not yet implemented")
 }

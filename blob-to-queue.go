@@ -7,10 +7,6 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
-	// https://github.com/Shopify/sarama
-	// https://pkg.go.dev/github.com/twmb/kafka-go/pkg/kgo
-	// https://github.com/streadway/amqp
-	// https://github.com/rabbitmq/amqp091-go
 )
 
 /*
@@ -52,7 +48,7 @@ func main() {
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
 	// Read flatevents from the blobstorage and add them to the queue
-	queue := make(chan flatevent, 10000)
+	queue := make(chan Flatevent, 10000)
 	defer close(queue)
 
 	go func() {
@@ -70,7 +66,7 @@ func main() {
 	for {
 		// Read flatevents from the blobstorage and add them to the queue
 		if fetchmore {
-			queue := make(chan flatevent, 10000)
+			queue := make(chan Flatevent, 10000)
 			go blobworker(queue)
 		}
 		// Read from the queue and decide what to do with the output
@@ -78,13 +74,14 @@ func main() {
 	}
 }
 
-func send(queue <-chan flatevent) {
+func send(queue <-chan Flatevent) {
 	// TODO: Create break handler to finish the queue
 	for {
 		nsg := <-queue
 		// TODO: filter?
 		// TODO hardcoded output, replace with configHandler info
-		output := "stdout"
+		// output := "stdout"
+		output := "summary"
 		switch output {
 		case "eventhub":
 			sendAzure(nsg)

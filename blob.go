@@ -8,7 +8,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 )
 
-func blobworker(queue chan flatevent) {
+func blobworker(queue chan Flatevent) {
 	config := configHandler()
 	//print(config)
 	cred, err := azblob.NewSharedKeyCredential(config.Accountname, config.Accountkey)
@@ -62,7 +62,7 @@ func blobworker(queue chan flatevent) {
 	}
 }
 
-func fullRead(queue chan flatevent, name string) {
+func fullRead(queue chan Flatevent, name string) {
 	config := configHandler()
 	cred, err := azblob.NewSharedKeyCredential(config.Accountname, config.Accountkey)
 	Error(err)
@@ -105,7 +105,7 @@ func fullRead(queue chan flatevent, name string) {
 	nsgflowlog(queue, downloadedData.Bytes(), name)
 }
 
-func partialRead(queue chan flatevent, name string) {
+func partialRead(queue chan Flatevent, name string) {
 	config := configHandler()
 	cred, err := azblob.NewSharedKeyCredential(config.Accountname, config.Accountkey)
 	Error(err)

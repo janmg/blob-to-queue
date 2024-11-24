@@ -32,39 +32,13 @@ type NSGFlowLogs struct {
 	} `json:"records"`
 }
 
-// struct for (temporary) storing event in flat format as json compatbile struct, to easily transform the event to csv or ecs
-type flatevent struct {
-	Time          time.Time `json:"time"`
-	SystemID      string    `json:"systemId"`
-	MACAdress     string    `json:"macAddress"`
-	Category      string    `json:"category"`
-	ResourceID    string    `json:"resourceId"`
-	OperationName string    `json:"operationName"`
-	Version       int       `json:"Version"`
-	Rule          string    `json:"rule"`
-	Mac           string    `json:"mac"`
-	Unixtime      string    `json:"unixtime"`
-	SrcIP         string    `json:"srcip"`
-	DstIP         string    `json:"dstip"`
-	SrcPort       string    `json:"srcport"`
-	DstPort       string    `json:"dstport"`
-	Proto         string    `json:"proto"`
-	Direction     string    `json:"direction"`
-	Action        string    `json:"action"`
-	State         string    `json:"state"`
-	SrcPackets    int       `json:"srcpackets"`
-	SrcBytes      int       `json:"srcbytes"`
-	DstPackets    int       `json:"dstpackets"`
-	DstBytes      int       `json:"dstbytes"`
-}
-
-func nsgflowlog(queue chan<- flatevent, flowlogs []byte, blobname string) {
+func nsgflowlog(queue chan<- Flatevent, flowlogs []byte, blobname string) {
 	count := 0
 
 	var nsgflowlogs NSGFlowLogs
 	json.Unmarshal(flowlogs, &nsgflowlogs)
 	for _, elements := range nsgflowlogs.Records {
-		var event flatevent
+		var event Flatevent
 		event.Time = elements.Time
 		event.SystemID = elements.SystemID
 		event.MACAdress = elements.MacAddress
@@ -86,9 +60,9 @@ func nsgflowlog(queue chan<- flatevent, flowlogs []byte, blobname string) {
 			}
 		}
 	}
-	fmt.Println("nsgflowlog count: ", count)
+	fmt.Println("nsgflowlog count: ", count, " in file", blobname)
 }
-func addtuples(event flatevent, nsgflow string) flatevent {
+func addtuples(event Flatevent, nsgflow string) Flatevent {
 	tups := strings.Split(nsgflow, ",")
 	event.Unixtime = tups[0]
 	event.SrcIP = tups[1]

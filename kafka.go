@@ -6,9 +6,11 @@ import (
 	"fmt"
 
 	"github.com/segmentio/kafka-go"
+	// https://github.com/Shopify/sarama
+	// https://pkg.go.dev/github.com/twmb/kafka-go/pkg/kgo
 )
 
-func sendKafka(nsg flatevent) {
+func sendKafka(nsg Flatevent) {
 	fmt.Println("Kafka sending")
 	topic := "insights-logs-networksecuritygroupflowevent"
 	partition := 0

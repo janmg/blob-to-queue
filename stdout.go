@@ -5,6 +5,6 @@ import (
 )
 
 // TODO hardcoded format, replace with configHandler info
-func stdout(nsg flatevent) {
+func stdout(nsg Flatevent) {
 	fmt.Print(format("csv", nsg))
 }

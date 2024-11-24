@@ -8,7 +8,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azeventhubs"
 )
 
-func sendAzure(nsg flatevent) {
+func sendAzure(nsg Flatevent) {
 	fmt.Println("Azure sending")
 	// "containerName"
 
@@ -37,7 +37,7 @@ func sendAzure(nsg flatevent) {
 	Error(err)
 }
 
-func eventdata(nsg flatevent) *azeventhubs.EventData {
+func eventdata(nsg Flatevent) *azeventhubs.EventData {
 	json, err := json.Marshal(nsg)
 	Error(err)
 	fmt.Println(json)

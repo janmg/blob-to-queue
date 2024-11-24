@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -33,41 +32,13 @@ type VNETFlowLogs struct {
 	} `json:"records"`
 }
 
-// struct for (temporary) storing event in flat format as json compatbile struct, to easily transform the event to csv or ecs
-// need to normalize with nsgflowlog
-type vnetflatevent struct {
-	Time              time.Time `json:"time"`
-	FlowLogVersion    string    `json:"flowlogversion"`
-	FlowLogGUID       string    `json:"flowlogguid"`
-	MACAdress         string    `json:"macAddress"`
-	Category          string    `json:"category"`
-	FlowLogResourceID string    `json:"flowlogresourceid"`
-	TargetResourceID  string    `json:"targetresourceid"`
-	OperationName     string    `json:"operationName"`
-	ACLID             string    `json:"aclid"`
-	Rule              string    `json:"rule"`
-	Unixtime          string    `json:"unixtime"`
-	SrcIP             string    `json:"srcip"`
-	DstIP             string    `json:"dstip"`
-	SrcPort           string    `json:"srcport"`
-	DstPort           string    `json:"dstport"`
-	Proto             int       `json:"proto"`
-	Direction         string    `json:"direction"`
-	State             string    `json:"state"`
-	Encryption        bool      `json:"encryption"`
-	SrcPackets        int       `json:"srcpackets"`
-	SrcBytes          int       `json:"srcbytes"`
-	DstPackets        int       `json:"dstpackets"`
-	DstBytes          int       `json:"dstbytes"`
-}
-
-func vnetflowlog(queue chan<- flatevent, flowlogs []byte, blobname string) {
+func vnetflowlog(queue chan<- Flatevent, flowlogs []byte, blobname string) {
 	count := 0
 
 	var vnetflowlogs VNETFlowLogs
 	json.Unmarshal(flowlogs, &vnetflowlogs)
 	for _, elements := range vnetflowlogs.Records {
-		var event vnetflatevent
+		var event Flatevent
 		event.Time = elements.Time
 		event.MACAdress = elements.MacAddress
 		event.Category = elements.Category
@@ -88,14 +59,15 @@ func vnetflowlog(queue chan<- flatevent, flowlogs []byte, blobname string) {
 	}
 	fmt.Println("vnetflowlog count: ", count)
 }
-func vnettuples(event vnetflatevent, vnetflow string) vnetflatevent {
+
+func vnettuples(event Flatevent, vnetflow string) Flatevent {
 	tups := strings.Split(vnetflow, ",")
 	event.Unixtime = tups[0]
 	event.SrcIP = tups[1]
 	event.DstIP = tups[2]
 	event.SrcPort = tups[3]
 	event.DstPort = tups[4]
-	event.Proto, _ = strconv.Atoi(tups[5]) // Now an IANA protocol number
+	event.Proto = tups[5] // Now an IANA protocol number
 	event.Direction = tups[6]
 	event.State = tups[7]
 	event.Encryption = false
