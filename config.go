@@ -8,11 +8,12 @@ import (
 )
 
 // TODO: Export all configs not just blob account
-type Blob struct {
-	Accountname   string `mapstructure:"accountName"`
-	Accountkey    string `mapstructure:"accountkey"`
-	ContainerName string `mapstructure:"containerName"`
-	Cloud         string `mapstructure:"cloud"`
+type Config struct {
+	Accountname   string   `mapstructure:"accountName"`
+	Accountkey    string   `mapstructure:"accountkey"`
+	ContainerName string   `mapstructure:"containerName"`
+	Cloud         string   `mapstructure:"cloud"`
+	Output        []string `mapstructure:"output"`
 }
 
 /*
@@ -23,19 +24,18 @@ type output struct {
 }
 */
 
-var blob Blob
+//type IBlob interface {
+//	configPrint()
+//}
 
-type IBlob interface {
-	Print()
-}
-
-func configHandler() Blob {
+func configHandler() Config {
 	// https://github.com/spf13/viper#watching-and-re-reading-config-files
 	var conf = viper.New()
 
 	conf.SetDefault("Cloud", "blob.core.windows.net")
 	conf.SetDefault("registry", "./registry.dat")
 	conf.SetDefault("registrypolicy", "resume")
+	conf.SetDefault("output", "stdout")
 	// ['resume','start_over','start_fresh']
 	conf.SetDefault("interval", 60)
 	// "resourceId=/SUBSCRIPTIONS/F5DD6E2D-1F42-4F54-B3BD-DBF595138C59/RESOURCEGROUPS/VM/PROVIDERS/MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/OCTOBER-NSG/y=2023/m=10/d=31/h=18/m=00"
@@ -57,25 +57,25 @@ func configHandler() Blob {
 	err := conf.ReadInConfig()
 	Error(err)
 
-	conf.Unmarshal(&blob)
+	conf.Unmarshal(&config)
 
 	conf.WatchConfig()
 	if conf.GetBool("fsnotify") {
 		conf.OnConfigChange(func(e fsnotify.Event) {
 			fmt.Println("Config file changed:", e.Name)
-			conf.Unmarshal(&blob)
+			conf.Unmarshal(&config)
 			//lookup = append(lookup, output{"stdout", "", "Flat"})
 			//lookup = append(lookup, output{"summary", "", "Flat"})
 			//lookup = append(lookup, output{"azurehub", viper.GetString("eventhub.connectionString"), viper.GetString("eventhub.format")})
 		})
 	}
-	//blob.print()
-	return blob
+	return config
 }
 
-func print(blob Blob) {
-	fmt.Println(blob.Accountname)
-	fmt.Println(blob.Accountkey)
-	fmt.Println(blob.ContainerName)
-	fmt.Println(blob.Cloud)
+func configPrint(config Config) {
+	fmt.Println(config.Accountname)
+	fmt.Println(config.Accountkey)
+	fmt.Println(config.ContainerName)
+	fmt.Println(config.Cloud)
+	fmt.Println(config.Output)
 }

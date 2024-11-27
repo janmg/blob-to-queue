@@ -100,6 +100,8 @@ func fullRead(queue chan Flatevent, name string) {
 	err = retryReader.Close()
 	Error(err)
 
+	// TODO:
+	//    THIS IS WHERE BLOBS DONT GET CHOPPED IN LINES
 	// TODO: How to process lines?
 	// parse the json into a flatevent struct and push it into the queue
 	nsgflowlog(queue, downloadedData.Bytes(), name)

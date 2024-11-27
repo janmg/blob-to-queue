@@ -52,9 +52,8 @@ func nsgflowlog(queue chan<- Flatevent, flowlogs []byte, blobname string) {
 				event.Mac = flow.Mac
 				for _, tuples := range flow.FlowTuples {
 					event = addtuples(event, tuples)
-					//fmt.Println(tuples)
 					queue <- event
-					// do some wait event if channel is full?
+					// TODO: do some wait event if channel is full?
 					count++
 				}
 			}

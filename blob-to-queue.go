@@ -23,6 +23,7 @@ format events
 send to stream
 printing out to stdout or logfile
 */
+var config Config
 
 func Error(err error) {
 	if err != nil {
@@ -39,11 +40,11 @@ func Warning(err error) {
 
 func main() {
 	fmt.Printf("blob-to-queue v1.0-dev\n")
-	//var blob IBlob = configHandler()
-	//blob.Print()
+	config = configHandler()
+	//configPrint(blob)
 
 	// Shutdown handler, if stop signal comes, process last messages in the queue, but stop inflow
-	fetchmore := true
+	//fetchmore := true
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
@@ -54,7 +55,7 @@ func main() {
 	go func() {
 		sig := <-sigs
 		fmt.Println(sig)
-		fetchmore = false
+		//fetchmore = false
 		fmt.Println("stopping after processing the last events, now in the queue: ", len(queue))
 		for len(queue) > 0 {
 			time.Sleep(10 * time.Second)
@@ -63,42 +64,46 @@ func main() {
 		os.Exit(99)
 	}()
 
-	for {
-		// Read flatevents from the blobstorage and add them to the queue
-		if fetchmore {
-			queue := make(chan Flatevent, 10000)
-			go blobworker(queue)
-		}
-		// Read from the queue and decide what to do with the output
-		send(queue)
-	}
+	// Read flatevents from the blobstorage and add them to the queue
+	go blobworker(queue)
+
+	// Read from the queue and decide what to do with the output
+	send(queue)
 }
 
 func send(queue <-chan Flatevent) {
-	// TODO: Create break handler to finish the queue
+	// Read from the queue and decide what to do with the output
 	for {
 		nsg := <-queue
+		//fmt.Println(format("csv", nsg))
 		// TODO: filter?
-		// TODO hardcoded output, replace with configHandler info
-		// output := "stdout"
-		output := "summary"
-		switch output {
-		case "eventhub":
-			sendAzure(nsg)
-		case "kafka":
-			sendKafka(nsg)
-		case "mqtt":
-			sendMQTT(nsg)
-		case "ampq":
-			sendAMPQ(nsg)
-		case "zeromq":
-			sendZERO(nsg)
-		case "file":
-			appendFile(nsg)
-		case "stdout":
-			stdout(nsg)
-		case "summary":
-			statistics(nsg)
+
+		for index, output := range config.Output {
+			fmt.Println(index, output)
+			switch output {
+			case "elasticsearch":
+				sendElasticsearch(nsg)
+			case "eventhub":
+				sendAzure(nsg)
+			case "kafka":
+				sendKafka(nsg)
+			case "mqtt":
+				sendMQTT(nsg)
+			case "ampq":
+				sendAMPQ(nsg)
+			case "zeromq":
+				sendZERO(nsg)
+			case "keyval":
+				sendKeyval(nsg)
+			case "redis":
+				sendRedis(nsg)
+			case "file":
+				appendFile(nsg)
+			case "stdout":
+				stdout(nsg)
+			case "summary":
+				statistics(nsg)
+			}
 		}
 	}
 }
