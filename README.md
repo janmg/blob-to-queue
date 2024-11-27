@@ -4,6 +4,8 @@ Golang application for reading from an azure blob storage, listing the files tha
 # flatevents
 The original nsgflowlogs are nested json structures, the nsgflowlog logic will flatten the logic to make each log entry a standalone json event which can be filtered and converted into several formats and sent to several outputs
 
+In the output, it is possible to specify ECS as a format, this is an elasticsearch format that tries to unify the JSON
+
 # configure
 The configurationfile is a YAML file, which is reloadable on save, because its using spf13/viper. The configuration format allows for multiple output streams.
 configure multiple outputs
@@ -20,7 +22,8 @@ eventhub, kafka, ampq, mqtt, appendfiles, stdout, logstash
 and as a bonus for nsgflowlogs, create statistics by grouping the packets and calculating stats about packets and bytes in and out.
 
 # Running
-go run blob-to-queue.go flatevent.go config.go ecs.go blob.go nsgflowlogs.go format.go azure-eventhub.go kafka.go mqtt.go ampq.go zeromq.go stdout.go append.go stats.go
+go run blob-to-queue.go flatevent.go config.go ecs.go blob.go nsgflowlogs.go format.go azure-eventhub.go kafka.go mqtt.go ampq.go zeromq.go stdout.go append.go stats.go redis.go keyval.go elasticsearch.go
+
 blob-to-queue v1.0-dev
 
 Listing the blobs in the container:

@@ -29,6 +29,7 @@ func format_json(nsg Flatevent) string {
 
 func format_csv(nsg Flatevent) string {
 	// copy from gocarina the csv reader and strip out the need for an array of structs, here I only have one event in a struct at a time and don't want the header
+	// maybe nice to doublequote the values?
 	// https://github.com/gocarina/gocsv/blob/master/csv.go
 	nsgs := []*Flatevent{}
 	nsgs = append(nsgs, &nsg)

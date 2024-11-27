@@ -78,8 +78,7 @@ func send(queue <-chan Flatevent) {
 		//fmt.Println(format("csv", nsg))
 		// TODO: filter?
 
-		for index, output := range config.Output {
-			fmt.Println(index, output)
+		for _, output := range config.Output {
 			switch output {
 			case "elasticsearch":
 				sendElasticsearch(nsg)
