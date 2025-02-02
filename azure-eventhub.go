@@ -9,7 +9,7 @@ import (
 )
 
 func sendAzure(nsg Flatevent) {
-	fmt.Println("Azure sending")
+	fmt.Println("Azure Eventhub sending")
 	// "containerName"
 
 	// "Endpoint=sb://nsgflowlogs.servicebus.windows.net/;SharedAccessKeyName=abc;SharedAccessKey=123"

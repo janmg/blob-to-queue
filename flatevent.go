@@ -23,7 +23,7 @@ type Flatevent struct {
 	DstIP             string    `json:"dstip"`
 	SrcPort           string    `json:"srcport"`
 	DstPort           string    `json:"dstport"`
-	Proto             string    `json:"proto"` // I would have liked Proto to be an int, but get the letters T and U for TCP and UDP instead
+	Proto             string    `json:"proto"` // I would have liked Proto to be an int, but nsgflowlogs uses the letters T and U for TCP and UDP instead
 	Direction         string    `json:"direction"`
 	Action            string    `json:"action"`
 	State             string    `json:"state"`

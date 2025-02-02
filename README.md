@@ -12,6 +12,9 @@ configure multiple outputs
 
 blob-to-queue.yaml
 
+
+output: ["stdout","file"]
+
 # configure input
 accountName: "blobstoragename"
 accountKey: "AMWsmPcgy/1234567890123445abcdefghijkl/1234567890123445abcdefghijklABCDEFGHI+ASt3SvXjw=="

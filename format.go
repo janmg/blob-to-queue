@@ -14,17 +14,16 @@ func format(format string, nsg Flatevent) string {
 	case "csv":
 		formatted = format_csv(nsg)
 	case "json":
-		formatted = format_json(nsg)
+		formatted = string(format_json(nsg))
 	case "ecs":
 		formatted = format_ecs(nsg)
 	}
 	return formatted
 }
 
-func format_json(nsg Flatevent) string {
+func format_json(nsg Flatevent) []byte {
 	event_json, _ := json.Marshal(nsg)
-	fmt.Print(event_json)
-	return string(event_json)
+	return event_json
 }
 
 func format_csv(nsg Flatevent) string {
