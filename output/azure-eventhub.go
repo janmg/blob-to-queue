@@ -1,4 +1,4 @@
-package main
+package output
 
 import (
 	"context"
@@ -6,9 +6,11 @@ import (
 	"fmt"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azeventhubs"
+	"janmg.com/blob-to-queue/common"
+	"janmg.com/blob-to-queue/format"
 )
 
-func sendAzure(nsg Flatevent) {
+func SendAzure(nsg format.Flatevent) {
 	fmt.Println("Azure Eventhub sending")
 	// "containerName"
 
@@ -18,28 +20,28 @@ func sendAzure(nsg Flatevent) {
 	// TODO: Make into a config item ...
 	connectionString := "Endpoint=sb://nsgflowlogs.servicebus.windows.net/;SharedAccessKeyName=nsgflowlogs;SharedAccessKey=yq6akzSdE8YU1fsV1RoF9KVGodWvfMgx8+AEhHTKP9A="
 	kfk, err := azeventhubs.NewProducerClientFromConnectionString(connectionString, "janmg", nil)
-	Error(err)
+	common.Error(err)
 	// after removing the eventhub, this is the error
 	// 2024/01/20 13:30:13 (connlost): dial tcp: lookup nsgflowlogs.servicebus.windows.net: no such host
 
 	defer kfk.Close(context.TODO())
 
 	batch, err := kfk.NewEventDataBatch(context.TODO(), nil)
-	Error(err)
+	common.Error(err)
 	// TODO: currently serving a batch of one, need to figure out how to suck more out of the queue?
 	//err = batch.AddEventData(eventdata(nsg), nil)
 	ed := eventdata(nsg)
 	err = batch.AddEventData(ed, nil)
-	Error(err)
+	common.Error(err)
 
 	//TODO: thread and send based on time and availability
 	err = kfk.SendEventDataBatch(context.Background(), batch, nil)
-	Error(err)
+	common.Error(err)
 }
 
-func eventdata(nsg Flatevent) *azeventhubs.EventData {
+func eventdata(nsg format.Flatevent) *azeventhubs.EventData {
 	json, err := json.Marshal(nsg)
-	Error(err)
+	common.Error(err)
 	fmt.Println(json)
 	return &azeventhubs.EventData{
 		Body: json,

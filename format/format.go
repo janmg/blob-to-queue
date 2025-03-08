@@ -1,4 +1,4 @@
-package main
+package format
 
 import (
 	"encoding/json"
@@ -6,9 +6,11 @@ import (
 	"strconv"
 
 	"github.com/gocarina/gocsv"
+
+	"janmg.com/blob-to-queue/common"
 )
 
-func format(format string, nsg Flatevent) string {
+func Format(format string, nsg Flatevent) string {
 	var formatted string
 	switch format {
 	case "csv":
@@ -33,7 +35,7 @@ func format_csv(nsg Flatevent) string {
 	nsgs := []*Flatevent{}
 	nsgs = append(nsgs, &nsg)
 	csvContent, err := gocsv.MarshalStringWithoutHeaders(&nsgs)
-	Error(err)
+	common.Error(err)
 	return csvContent
 }
 

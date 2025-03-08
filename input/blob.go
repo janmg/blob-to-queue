@@ -1,4 +1,4 @@
-package main
+package input
 
 import (
 	"bytes"
@@ -6,10 +6,12 @@ import (
 	"fmt"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
+	"janmg.com/blob-to-queue/common"
+	"janmg.com/blob-to-queue/format"
 )
 
-func blobworker(queue chan Flatevent) {
-	config := configHandler()
+func Blobworker(queue chan format.Flatevent) {
+	config := common.ConfigHandler()
 	location := "https://" + config.Accountname + "." + config.Cloud
 	fmt.Println(location)
 
@@ -22,6 +24,16 @@ func blobworker(queue chan Flatevent) {
 	fmt.Println("Listing the blobs in the container:")
 	registry = listFiles(config.Accountname, config.Accountkey, location)
 	fmt.Println(registry)
+
+	/*
+	        ChatGPT, suggests to frop events when the queue is full. Obviously would never do that and better to signal a monitor channel to signal to pause reading more data and check regularly if the queue is blocked or not.
+
+	   	 select {
+	   case queue <- event: // Non-blocking send
+	   default:
+	       fmt.Println("Warning: Dropped event due to full queue")
+	   }
+	*/
 
 	// list all the nsg's
 	// resourceId=/SUBSCRIPTIONS/F5DD6E2D-1F42-4F54-B3BD-DBF595138C59/RESOURCEGROUPS/VM/PROVIDERS/MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/
@@ -53,13 +65,14 @@ func blobworker(queue chan Flatevent) {
 }
 
 func listFiles(account string, key string, location string) map[string]int64 {
+	config := common.ConfigHandler()
 	var filelist map[string]int64
 	filelist = make(map[string]int64)
 
 	cred, err := azblob.NewSharedKeyCredential(config.Accountname, config.Accountkey)
-	Error(err)
+	common.Error(err)
 	client, err := azblob.NewClientWithSharedKeyCredential(location, cred, nil)
-	Error(err)
+	common.Error(err)
 
 	pager := client.NewListBlobsFlatPager(config.ContainerName, &azblob.ListBlobsFlatOptions{
 		Include: azblob.ListBlobsInclude{Snapshots: false, Versions: true},
@@ -71,7 +84,7 @@ func listFiles(account string, key string, location string) map[string]int64 {
 
 	for pager.More() {
 		resp, err := pager.NextPage(context.TODO())
-		Error(err)
+		common.Error(err)
 
 		for _, blob := range resp.Segment.BlobItems {
 
@@ -91,24 +104,24 @@ func listFiles(account string, key string, location string) map[string]int64 {
 	return filelist
 }
 
-func fullRead(queue chan Flatevent, name string) {
-	config := configHandler()
+func fullRead(queue chan format.Flatevent, name string) {
+	config := common.ConfigHandler()
 	cred, err := azblob.NewSharedKeyCredential(config.Accountname, config.Accountkey)
-	Error(err)
+	common.Error(err)
 	location := "https://" + config.Accountname + "." + config.Cloud
 	client, err := azblob.NewClientWithSharedKeyCredential(location, cred, nil)
-	Error(err)
+	common.Error(err)
 
 	ctx := context.Background()
 	/*
 		// ListBlockBlob
 		blobURL := fmt.Sprintf("https://%s.%s/%s/%s", config.Accountname, config.Cloud, config.ContainerName, name)
 		blockBlobClient, err := blockblob.NewClientWithSharedKeyCredential(blobURL, cred, nil)
-		Error(err)
+		common.Error(err)
 
 		blockList, err := blockBlobClient.GetBlockList(context.Background(), blockblob.BlockListTypeAll, nil)
 		// BlockListTypeCommitted
-		Error(err)
+		common.Error(err)
 
 			for _, blocks := range blockList.BlockList.CommittedBlocks {
 				fmt.Println(*blocks.Name, *blocks.Size)
@@ -118,30 +131,30 @@ func fullRead(queue chan Flatevent, name string) {
 	*/
 
 	get, err := client.DownloadStream(ctx, config.ContainerName, name, nil)
-	Error(err)
+	common.Error(err)
 
 	downloadedData := bytes.Buffer{}
 	retryReader := get.NewRetryReader(ctx, &azblob.RetryReaderOptions{})
 	_, err = downloadedData.ReadFrom(retryReader)
-	Error(err)
+	common.Error(err)
 	//fmt.Println(downloadedData.String())
 
 	err = retryReader.Close()
-	Error(err)
+	common.Error(err)
 
 	// parse the json into a flatevent struct and push it into the queue
 	nsgflowlog(queue, downloadedData.Bytes(), name)
 	// vnetflowlog(queue, downloadedData.Bytes(), name)
 }
 
-func partialRead(queue chan Flatevent, name string) {
-	config := configHandler()
+func partialRead(queue chan format.Flatevent, name string) {
+	config := common.ConfigHandler()
 	cred, err := azblob.NewSharedKeyCredential(config.Accountname, config.Accountkey)
-	Error(err)
+	common.Error(err)
 
 	location := "https://" + config.Accountname + "." + config.Cloud
 	client, err := azblob.NewClientWithSharedKeyCredential(location, cred, nil)
-	Error(err)
+	common.Error(err)
 
 	ctx := context.Background()
 	/*
@@ -152,16 +165,16 @@ func partialRead(queue chan Flatevent, name string) {
 		get, err := client.DownloadStream(ctx, config.ContainerName, *blob.Name, &azblob.DownloadStreamOptions{Range: httpRange})
 	*/
 	get, err := client.DownloadStream(ctx, config.ContainerName, name, nil)
-	Error(err)
+	common.Error(err)
 
 	downloadedData := bytes.Buffer{}
 	retryReader := get.NewRetryReader(ctx, &azblob.RetryReaderOptions{})
 	_, err = downloadedData.ReadFrom(retryReader)
-	Error(err)
+	common.Error(err)
 	//fmt.Println(downloadedData.String())
 
 	err = retryReader.Close()
-	Error(err)
+	common.Error(err)
 
 	// TODO: How to process lines?
 	// parse the json into a flatevent struct and push it into the queue

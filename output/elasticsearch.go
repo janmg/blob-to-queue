@@ -1,4 +1,4 @@
-package main
+package output
 
 import (
 	"bytes"
@@ -10,9 +10,11 @@ import (
 	"time"
 
 	elasticsearch "github.com/elastic/go-elasticsearch/v8"
+	"janmg.com/blob-to-queue/common"
+	"janmg.com/blob-to-queue/format"
 )
 
-func sendElasticsearch(nsg Flatevent) {
+func SendElasticsearch(nsg format.Flatevent) {
 	// convert this sender to worker that can reuse elasticsearch connections, would this require a channel ?
 	// https://gobyexample.com/worker-pools
 	// https://github.com/elastic/go-elasticsearch/issues/123
@@ -33,17 +35,29 @@ func sendElasticsearch(nsg Flatevent) {
 		},
 	}
 	es, err := elasticsearch.NewClient(cfg)
-	Error(err)
+	common.Error(err)
 
 	if err != nil {
 		log.Printf("Error creating the client: %s", err)
 	} else {
 		//log.Println(es.Info())
-		data := format_json(nsg)
-		_, err := es.Index("nsgflowlog", bytes.NewReader(data))
-		Error(err)
+		data := format.Format("json", nsg)
+		_, err := es.Index("nsgflowlog", bytes.NewReader([]byte(data)))
+		common.Error(err)
 		//_, err = Client.Bulk(...).
 		//fmt.Println(res)
 		// 2024/12/02 20:20:31 net/http: timeout awaiting response headers
+
+		/* ChatGPT suggestion, but this covers multiple requests at once for bulk api, this means code improvemnts in nsgflowlogs and queuing a batch
+		var bulkData strings.Builder
+		for _, event := range events {
+			bulkData.WriteString(fmt.Sprintf(`{"index":{}}\n%s\n`, eventJSON))
+		}
+
+		req := esapi.BulkRequest{
+			Index: "nsgflowlogs",
+			Body:  strings.NewReader(bulkData.String()),
+		}
+		*/
 	}
 }

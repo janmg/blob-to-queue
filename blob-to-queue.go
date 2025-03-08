@@ -2,11 +2,14 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"janmg.com/blob-to-queue/common"
+	"janmg.com/blob-to-queue/format"
+	"janmg.com/blob-to-queue/input"
 )
 
 /*
@@ -23,24 +26,11 @@ format events
 send to stream
 printing out to stdout or logfile
 */
-var config Config
-
-func Error(err error) {
-	if err != nil {
-		log.Fatal(err.Error())
-		os.Exit(2)
-	}
-}
-
-func Warning(err error) {
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-}
+var config common.Config
 
 func main() {
 	fmt.Printf("blob-to-queue v1.0-dev\n")
-	config = configHandler()
+	config = common.ConfigHandler()
 	//configPrint(blob)
 
 	// Shutdown handler, if stop signal comes, process last messages in the queue, but stop inflow
@@ -49,7 +39,7 @@ func main() {
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
 	// Read flatevents from the blobstorage and add them to the queue
-	queue := make(chan Flatevent, 10000)
+	queue := make(chan format.Flatevent, 10000)
 	defer close(queue)
 
 	go func() {
@@ -65,13 +55,13 @@ func main() {
 	}()
 
 	// Read flatevents from the blobstorage and add them to the queue
-	go blobworker(queue)
+	go input.Blobworker(queue)
 
 	// Read from the queue and decide what to do with the output
 	send(queue)
 }
 
-func send(queue <-chan Flatevent) {
+func send(queue <-chan format.Flatevent) {
 	// Read from the queue and decide what to do with the output
 	for {
 		nsg := <-queue
@@ -81,27 +71,27 @@ func send(queue <-chan Flatevent) {
 		for _, output := range config.Output {
 			switch output {
 			case "elasticsearch":
-				sendElasticsearch(nsg)
+				output.SendElasticsearch(nsg)
 			case "eventhub":
-				sendAzure(nsg)
+				output.SendAzure(nsg)
 			case "kafka":
-				sendKafka(nsg)
+				output.SendKafka(nsg)
 			case "mqtt":
-				sendMQTT(nsg)
+				output.SendMQTT(nsg)
 			case "ampq":
-				sendAMPQ(nsg)
+				output.SendAMPQ(nsg)
 			case "zeromq":
-				sendZERO(nsg)
+				output.SendZERO(nsg)
 			case "keyval":
-				sendKeyval(nsg)
+				output.SendKeyval(nsg)
 			case "redis":
-				sendRedis(nsg)
+				output.SendRedis(nsg)
 			case "file":
-				appendFile(nsg)
+				output.AppendFile(nsg)
 			case "stdout":
-				stdout(nsg)
+				output.Stdout(nsg)
 			case "summary":
-				statistics(nsg)
+				output.Statistics(nsg)
 			}
 		}
 	}
