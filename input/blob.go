@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"janmg.com/blob-to-queue/common"
@@ -14,6 +15,16 @@ func Blobworker(queue chan format.Flatevent) {
 	config := common.ConfigHandler()
 	location := "https://" + config.Accountname + "." + config.Cloud
 	fmt.Println(location)
+
+	// TODO: NSGFlowLogs grow in predictable directories and files, only need to keep a pointer to the last processed directory.
+	// TODO: Would need to way to manually change that pointer, incase old files need to be reprocessed
+	// TODO: The worker would need a timer to check for new files or grown files?
+	interval := time.NewTimer(60 * time.Second)
+
+	go func() {
+		<-interval.C
+		fmt.Println("Interval timer fired")
+	}()
 
 	// keep a registry
 	var registry map[string]int64
@@ -26,13 +37,13 @@ func Blobworker(queue chan format.Flatevent) {
 	fmt.Println(registry)
 
 	/*
-	        ChatGPT, suggests to frop events when the queue is full. Obviously would never do that and better to signal a monitor channel to signal to pause reading more data and check regularly if the queue is blocked or not.
+		       ChatGPT, suggests to drop events when the queue is full. Obviously would never do that and better to signal a monitor channel to signal to pause reading more data and check regularly if the queue is blocked or not.
 
-	   	 select {
-	   case queue <- event: // Non-blocking send
-	   default:
-	       fmt.Println("Warning: Dropped event due to full queue")
-	   }
+			   select {
+			   case queue <- event: // Non-blocking send
+			   default:
+			       fmt.Println("Warning: Dropped event due to full queue")
+			   }
 	*/
 
 	// list all the nsg's

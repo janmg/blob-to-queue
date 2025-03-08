@@ -41,3 +41,10 @@ My problem with JAVA is the Oracle licensing requirements per JVM for large ente
 
 # kafka
 nsgflowlogs are events, it would make more sense to me to have them natively available in an eventhub. An eventhub is an AMPQ / Kafka compatible queueing broker. This program will read from the files that are written every minute and add them as a batch to an output stream. I focus first on writing it to an eventhub, because it is available in Azure. Other output formats are planned are native kafka and amqp and maybe mqtt or any. Eventhubs without traffic already cost me 16 euros per months, so having a cost effective alternative is important for a single individual.
+
+# What ChatGPT thinks of my code
+✅ Prevent Deadlocks: Use a buffered channel and select for non-blocking writes.
+✅ Faster JSON Parsing: Use json.Decoder for efficiency.
+✅ Parallel Processing: Implement worker Goroutines for concurrency.
+✅ Efficient Elasticsearch Writes: Use the Bulk API to reduce network calls.
+✅ Better Logging & Error Handling: Implement structured logging with Zap or Logrus.

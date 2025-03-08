@@ -10,6 +10,7 @@ import (
 	"janmg.com/blob-to-queue/common"
 	"janmg.com/blob-to-queue/format"
 	"janmg.com/blob-to-queue/input"
+	"janmg.com/blob-to-queue/output"
 )
 
 /*
@@ -55,6 +56,8 @@ func main() {
 	}()
 
 	// Read flatevents from the blobstorage and add them to the queue
+	// TODO: Should this be done for multiple storage accounts? or multiple directories? Or some logic between them? I think each directory should have each own worker.
+	// e.g. /SUBSCRIPTIONS/F5DD6E2D-1F42-4F54-B3BD-DBF595138C59/RESOURCEGROUPS/VM/PROVIDERS/MICROSOFT.NETWORK/OCTOBER-NSG
 	go input.Blobworker(queue)
 
 	// Read from the queue and decide what to do with the output
@@ -68,8 +71,8 @@ func send(queue <-chan format.Flatevent) {
 		//fmt.Println(format("csv", nsg))
 		// TODO: filter?
 
-		for _, output := range config.Output {
-			switch output {
+		for _, out := range config.Output {
+			switch out {
 			case "elasticsearch":
 				output.SendElasticsearch(nsg)
 			case "eventhub":

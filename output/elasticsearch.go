@@ -10,6 +10,7 @@ import (
 	"time"
 
 	elasticsearch "github.com/elastic/go-elasticsearch/v8"
+
 	"janmg.com/blob-to-queue/common"
 	"janmg.com/blob-to-queue/format"
 )
@@ -20,6 +21,7 @@ func SendElasticsearch(nsg format.Flatevent) {
 	// https://github.com/elastic/go-elasticsearch/issues/123
 
 	cert, _ := os.ReadFile("elastic_ca.crt")
+	// TODO: Make configurable
 	cfg := elasticsearch.Config{
 		//CloudID: "my-cluster:dXMtZWFzdC0xLZC5pbyRjZWM2ZjI2MWE3NGJm...",
 		Addresses: []string{"https://10.0.0.247:9200"},

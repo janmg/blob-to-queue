@@ -1,0 +1,79 @@
+## GENERIC CONFIG
+# if fsnotify is set to true at the start of the program, changes will take affect on save on a running instance, if the program started without or set to false the program must be restarted to take affect
+fsnotify: true
+
+# loglevel 0 is silent, 1 is medium, 2 is a lot, 3 is overkill
+loglevel: 1
+
+
+## INPUT CONFIG
+# read from blob storage, default format is "json",
+# TODO implement jsonlines, csv, line, regexp parser when everything else works. This program is initially for nsgflowlog parsing.
+accountName: "janmg"
+accountKey: "AMWvXjw=="
+containerName: "insights-logs-networksecuritygroupflowevent"
+## Defaults
+#cloud: "blob.core.windows.net"
+#format: "json"
+#type: "nsgflowlog"
+#registry: "./registry.dat"
+#registrypolicy: "resume"
+#interval: 60
+
+## FILTER CONFIG
+# not implemented, this program came from logstash-input-azure_blob_storage, to be used to filter logs independantly.
+
+
+## OUTPUT CONFIG
+# The formatter can output as original "line", as "csv"
+# setting an output will enable the output immediately after saving the file, because fsnotify will read the changes and apply them on the fly.
+# format can be csv, flat, ecs, avro
+
+# Bit of a hack, but I don't know how to deal with multiple outputs
+output: ["elasticsearch","stdout","file"]
+
+# output to stdout
+stdout:
+  format: "csv"
+
+# output to file
+file:
+  filename: "./nsg.log"
+  format: "csv"
+
+#summary to file
+summary:
+  filename: "./nsg-summary.log"
+  udp_timeout: 120
+
+# output to azure eventhub
+eventhub:
+  #Event Hubs Namespace / Shared access policies: RootManageSharedAccessKey
+  # not in the entities, and create a new "send" policy
+  connectionString: "Endpoint=sb://nsgflowlogs.servicebus.windows.net/;SharedAccessKeyName=nsgflowlogs;SharedAccessKey=yq6a9A="
+  #connectionString: "Endpoint=sb://nsgflowlogs.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=pVYkhJMJzJw="
+  format: "csv"
+
+# output to kafka
+kafka:
+  bootstrapserver: "localhost:9096"
+  format: "json"
+
+# output to ampq
+ampq:
+  server: "ampq://localhost:1234"
+  format: "json"
+
+# output to mqtt
+mqtt:
+  server: "https://localhost"
+  format: "json"
+  topic: "/logs/nsg"
+
+# output to elasticsearch
+elasticsearch:
+  addresses: "https://10.0.0.247:9200"
+#	serviceToken: "AAEAAWVsYXRmEtblE"
+  format: "ecs"
+  index: "nsg-"
+  intercal: 1w
