@@ -19,21 +19,40 @@ func Blobworker(queue chan format.Flatevent) {
 	// TODO: NSGFlowLogs grow in predictable directories and files, only need to keep a pointer to the last processed directory.
 	// TODO: Would need to way to manually change that pointer, incase old files need to be reprocessed
 	// TODO: The worker would need a timer to check for new files or grown files?
+
+	// keep a registry, filelist and a worklist
+	// The registry is the list of files already processed, the filelist is a list of currently seen files, the worklist contains the new files or the files that grew
+	var registry map[string]int64 = make(map[string]int64)
+	var filelist map[string]int64 = make(map[string]int64)
+	var worklist map[string]int64 = make(map[string]int64)
+
 	interval := time.NewTimer(60 * time.Second)
+	//interval := time.NewTicker(60 * time.Second)
+	defer interval.Stop()
 
 	go func() {
 		<-interval.C
 		fmt.Println("Interval timer fired")
-	}()
+		// 1. Lists all the files in the remote storage account that match the path prefix
+		filelist = listFiles(config.Accountname, config.Accountkey, location)
+		// 2. Filters on path_filters to only include files that match the directory and file glob (**/*.json)
+		worklist = registry - filelist
+		// 3. Compare the list of files to the the registry with the new filelist and put the delta in a worklist
 
-	// keep a registry
-	var registry map[string]int64
-	registry = make(map[string]int64)
+		// 4. Process the worklist and put all events in the logstash queue.
+
+		// 5. Save the registry with files and sizes to a file
+
+		// 6. if there is time left, sleep to complete the interval. If processing takes more than an inteval, save the registry and continue.
+		// ... try to sync the timer to when the files are actually written to the storage account and wait an additional 5 seconds before reading.
+		// ... did storage accounts implement some time of difference tracking journal?
+		// 7. If stop signal comes, finish the current file, save the registry and quit
+
+	}()
 
 	//print(config)
 	// List the blobs in the container
 	fmt.Println("Listing the blobs in the container:")
-	registry = listFiles(config.Accountname, config.Accountkey, location)
 	fmt.Println(registry)
 
 	/*
@@ -57,14 +76,6 @@ func Blobworker(queue chan format.Flatevent) {
 
 	*/
 
-	// 1. Lists all the files in the remote storage account that match the path prefix
-	// 2. Filters on path_filters to only include files that match the directory and file glob (**/*.json)
-	// 3. Save the listed files in a registry of known files and filesizes.
-	// 4. List all the files again and compare the registry with the new filelist and put the delta in a worklist
-	// 5. Process the worklist and put all events in the logstash queue.
-	// 6. if there is time left, sleep to complete the interval. If processing takes more than an inteval, save the registry and continue.
-	// 7. If stop signal comes, finish the current file, save the registry and quit
-
 	// filelist = Hash.new
 	// worklist = Hash.new
 	// @last = start = Time.now.to_i
@@ -77,8 +88,7 @@ func Blobworker(queue chan format.Flatevent) {
 
 func listFiles(account string, key string, location string) map[string]int64 {
 	config := common.ConfigHandler()
-	var filelist map[string]int64
-	filelist = make(map[string]int64)
+	var filelist map[string]int64 = make(map[string]int64)
 
 	cred, err := azblob.NewSharedKeyCredential(config.Accountname, config.Accountkey)
 	common.Error(err)
