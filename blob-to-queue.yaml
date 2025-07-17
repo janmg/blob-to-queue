@@ -16,9 +16,14 @@ containerName: "insights-logs-networksecuritygroupflowevent"
 #cloud: "blob.core.windows.net"
 #format: "json"
 #type: "nsgflowlog"
-#registry: "./registry.dat"
-#registrypolicy: "resume"
-#interval: 60
+timestamp: "timestamp.json"
+registry: "registry.dat"
+resumepolicy: "timestamp"
+interval: 60
+
+# Because golang does not support "infinite" channels, we set a maximum size for the queue. The watermark is the size until we stop reading in more data, the difference between qsize and qwatermark should be the amount of events that can be stored in a single file.
+qsize: 20000
+qwatermark: 16000
 
 ## FILTER CONFIG
 # not implemented, this program came from logstash-input-azure_blob_storage, to be used to filter logs independantly.

@@ -12,7 +12,6 @@ configure multiple outputs
 
 blob-to-queue.yaml
 
-
 output: ["stdout","file"]
 
 # configure input
@@ -25,7 +24,7 @@ eventhub, kafka, ampq, mqtt, appendfiles, stdout, logstash
 and as a bonus for nsgflowlogs, create statistics by grouping the packets and calculating stats about packets and bytes in and out.
 
 # Running
-go run blob-to-queue.go flatevent.go config.go ecs.go blob.go nsgflowlogs.go format.go azure-eventhub.go kafka.go mqtt.go ampq.go zeromq.go stdout.go append.go stats.go redis.go keyval.go elasticsearch.go
+go run blob-to-queue.go
 
 blob-to-queue v1.0-dev
 
@@ -44,7 +43,11 @@ nsgflowlogs are events, it would make more sense to me to have them natively ava
 
 # What ChatGPT thinks of my code
 ✅ Prevent Deadlocks: Use a buffered channel and select for non-blocking writes.
+
 ✅ Faster JSON Parsing: Use json.Decoder for efficiency.
+
 ✅ Parallel Processing: Implement worker Goroutines for concurrency.
+
 ✅ Efficient Elasticsearch Writes: Use the Bulk API to reduce network calls.
+
 ✅ Better Logging & Error Handling: Implement structured logging with Zap or Logrus.

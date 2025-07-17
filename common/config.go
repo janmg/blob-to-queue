@@ -13,6 +13,13 @@ type Config struct {
 	Accountkey    string   `mapstructure:"accountkey"`
 	ContainerName string   `mapstructure:"containerName"`
 	Cloud         string   `mapstructure:"cloud"`
+	Startpolicy   string   `mapstructure:"startpolicy"`
+	Resumepolicy  string   `mapstructure:"resumepolicy"`
+	Timestamp     string   `mapstructure:"timestamp"`
+	Registry      string   `mapstructure:"registry"`
+	Interval      int      `mapstructure:"interval"`
+	Qsize         int      `mapstructure:"qsize"`
+	Qwatermark    int      `mapstructure:"qwaterwark"`
 	Output        []string `mapstructure:"output"`
 }
 
@@ -32,12 +39,18 @@ func ConfigHandler() Config {
 	// https://github.com/spf13/viper#watching-and-re-reading-config-files
 	var conf = viper.New()
 
-	conf.SetDefault("Cloud", "blob.core.windows.net")
+	conf.SetDefault("cloud", "blob.core.windows.net")
+
+	conf.SetDefault("resumepolicy", "timestamp")
+	// ['timestamp','registry']
 	conf.SetDefault("registry", "./registry.dat")
-	conf.SetDefault("registrypolicy", "resume")
+	conf.SetDefault("timestamp", "./timestamp.json")
+	conf.SetDefault("startpolicy", "start_over")
+	// ['start_over','start_fresh']
+
 	conf.SetDefault("output", "stdout")
-	// ['resume','start_over','start_fresh']
 	conf.SetDefault("interval", 60)
+
 	// "resourceId=/SUBSCRIPTIONS/F5DD6E2D-1F42-4F54-B3BD-DBF595138C59/RESOURCEGROUPS/VM/PROVIDERS/MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/OCTOBER-NSG/y=2023/m=10/d=31/h=18/m=00"
 	conf.SetDefault("path_prefix", "['**/*']")  // array of prefixes a path must start with, "resourceId=/SUBSCRIPTIONS/F5DD6E2D-1F42-4F54-B3BD-DBF595138C59/RESOURCEGROUPS/VM/PROVIDERS/MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/OCTOBER-NSG/"
 	conf.SetDefault("path_include", "['**/*']") // array of strings that must occur, non-matching paths are ignored
@@ -78,5 +91,10 @@ func configPrint(conf Config) {
 	fmt.Println(conf.Accountkey)
 	fmt.Println(conf.ContainerName)
 	fmt.Println(conf.Cloud)
+	fmt.Println(conf.Startpolicy)
+	fmt.Println(conf.Resumepolicy)
+	fmt.Println(conf.Timestamp)
+	fmt.Println(conf.Interval)
+	fmt.Println(conf.Registry)
 	fmt.Println(conf.Output)
 }

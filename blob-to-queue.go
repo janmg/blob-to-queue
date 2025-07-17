@@ -40,7 +40,7 @@ func main() {
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
 	// Read flatevents from the blobstorage and add them to the queue
-	queue := make(chan format.Flatevent, 10000)
+	queue := make(chan format.Flatevent, config.Qsize)
 	defer close(queue)
 
 	go func() {
