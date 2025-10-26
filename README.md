@@ -1,11 +1,6 @@
 # blob-to-queue
 Golang application for reading from an azure blob storage, listing the files that match a path filter and pushing the result to an event queue like kafka stream. Intended to offer an alternative to my own logstash module logstash-input-azure_blob_storage and move it's logic to a standalone program.
 
-# flatevents
-The original nsgflowlogs are nested json structures, the nsgflowlog logic will flatten the logic to make each log entry a standalone json event which can be filtered and converted into several formats and sent to several outputs
-
-In the output, it is possible to specify ECS as a format, this is an elasticsearch format that tries to unify the JSON
-
 # configure
 The configurationfile is a YAML file, which is reloadable on save, because its using spf13/viper. The configuration format allows for multiple output streams.
 configure multiple outputs
@@ -18,6 +13,21 @@ output: ["stdout","file"]
 accountName: "blobstoragename"
 accountKey: "AMWsmPcgy/1234567890123445abcdefghijkl/1234567890123445abcdefghijklABCDEFGHI+ASt3SvXjw=="
 containerName: "insights-logs-networksecuritygroupflowevent"
+
+# Microsoft blobstorage
+Logfiles written to blobstorage in the json format have a header in the first block and a footer in the last block
+Block 0000: QTAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw {message: [
+Block 0001: Bobaba                                          {"timestamp": 98765432, "mac":"00:01:02:AA:AB:AC"},
+Block 0002: Bobae                                           {"timestamp": 98765433, "mac":"00:01:02:AA:AB:AD"}
+Block FFFF: WjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw ]}
+
+# resumepolicy
+In case blob-to-queue is stopped, it can continue processing from the file that was last processed. flowlogs have the timestamp in the directory and they can be read in sequence. The registry will then contain the directory that was last processed, because the time stamp is included in the filepath. "y=2023/m=10/d=31/h=14/m=00". The file may have grown with a blob since the last time the file was processed. Because the registry also contains the amount of bytes read since the last time, blob-to-queue will read the new parts.
+
+# flatevents
+The original nsgflowlogs and vnetflowlogs are nested json structures, the logic will flatten each log entry as a standalone json event which can be filtered and converted into several formats and sent to several outputs
+
+In the output, it is possible to specify ECS as a format, this is an elasticsearch format that tries to unify the JSON
 
 # configure output
 eventhub, kafka, ampq, mqtt, appendfiles, stdout, logstash
@@ -40,6 +50,8 @@ My problem with JAVA is the Oracle licensing requirements per JVM for large ente
 
 # kafka
 nsgflowlogs are events, it would make more sense to me to have them natively available in an eventhub. An eventhub is an AMPQ / Kafka compatible queueing broker. This program will read from the files that are written every minute and add them as a batch to an output stream. I focus first on writing it to an eventhub, because it is available in Azure. Other output formats are planned are native kafka and amqp and maybe mqtt or any. Eventhubs without traffic already cost me 16 euros per months, so having a cost effective alternative is important for a single individual.
+
+Other output queues are implemented as golang modules exist for ampq, mqtt, keyval, etcetera
 
 # What ChatGPT thinks of my code
 ✅ Prevent Deadlocks: Use a buffered channel and select for non-blocking writes.

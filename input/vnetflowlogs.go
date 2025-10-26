@@ -42,7 +42,7 @@ func vnetflowlog(queue chan<- format.Flatevent, flowlogs []byte, blobname string
 	for _, elements := range vnetflowlogs.Records {
 		var event format.Flatevent
 		event.Time = elements.Time
-		event.MACAdress = elements.MacAddress
+		event.MacAddress = elements.MacAddress
 		event.Category = elements.Category
 		event.OperationName = elements.OperationName
 		for _, flows := range elements.FlowRecords.Flows {
@@ -53,7 +53,7 @@ func vnetflowlog(queue chan<- format.Flatevent, flowlogs []byte, blobname string
 					event = vnettuples(event, tuples)
 					//fmt.Println(tuples)
 					queue <- event
-					// do some wait event if channel is full?
+					// TODO: do some wait event if channel is full?
 					count++
 				}
 			}
@@ -69,7 +69,15 @@ func vnettuples(event format.Flatevent, vnetflow string) format.Flatevent {
 	event.DstIP = tups[2]
 	event.SrcPort = tups[3]
 	event.DstPort = tups[4]
-	event.Proto = tups[5] // Now an IANA protocol number
+	switch tups[5] {
+	// Now an IANA protocol number
+	case "T":
+		event.Proto = 6
+	case "U":
+		event.Proto = 8
+	case "I":
+		event.Proto = 11
+	}
 	event.Direction = tups[6]
 	event.State = tups[7]
 	event.Encryption = false

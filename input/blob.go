@@ -75,12 +75,12 @@ func Blobworker(queue chan format.Flatevent) {
 }
 
 func doLoop(config common.Config, queue chan format.Flatevent, registry map[string]int64, last Stamp) {
+	// Should use a queue to signal that it's time to stop the ingress
 	for i := 0; len(queue) > config.Qwatermark; i++ {
 		fmt.Printf("Hit watermark, queue is at %d pause for 10 seconds", len(queue))
 		time.Sleep(10 * time.Second)
-		if i > 5 {
-			fmt.Println("Giving up waiting for queue")
-			return
+		if i%5 == 0 {
+			fmt.Println("1 Minute and still above the queue watermark, maybe the output is not processing?")
 		}
 	}
 
@@ -96,11 +96,9 @@ func doLoop(config common.Config, queue chan format.Flatevent, registry map[stri
 
 	// 1. Lists all the files in the remote storage account that match the path prefix
 	var filelist map[string]int64 = make(map[string]int64)
-	filelist = listFiles(config.Accountname, config.Accountkey, location)
+	filelist = listFiles(config.Resumepolicy, config.Accountname, config.Accountkey, location)
 	var fullfiles = 0
 	var partialfiles = 0
-
-	// TODO: Filter based on timestamp
 
 	// 2. Filters on path_filters to only include files that match the directory and file glob (**/*.json)
 	// TODO: filter on the timestamp so that only fresh files get processed
@@ -143,7 +141,7 @@ func doLoop(config common.Config, queue chan format.Flatevent, registry map[stri
 	// 7. If stop signal comes, finish the current file, save the registry and quit
 }
 
-func listFiles(account string, key string, location string) map[string]int64 {
+func listFiles(resumepolicy string, account string, key string, location string) map[string]int64 {
 	config := common.ConfigHandler()
 	var filelist map[string]int64 = make(map[string]int64)
 
@@ -174,12 +172,149 @@ func listFiles(account string, key string, location string) map[string]int64 {
 
 				}
 			*/
-			//registry
-			//fullRead(queue, *blob.Name)
-			filelist[*blob.Name] = *blob.Properties.ContentLength
+			if config.Resumepolicy == "timestamp" {
+				// Filter out based on timestamp
+				// Take the last 27 characters from the file. Compare it to the string of the last processed file and only use the once with a newer timestamp
+				// process last bit of the filepath and convert it to a date
+				// y=2023/m=10/d=31/h=13/m=00/
+				// filestamp := "/"+t.Year()+"/"+t.Month()+"/"+t.Day()+"/"+t.Hour()+"/"+t.Minute()
+				if blob.Name > lastread {
+
+				}
+			} else {
+				filelist[*blob.Name] = *blob.Properties.ContentLength
+			}
 		}
 	}
 	return filelist
+}
+
+// Read the files with the httpRange
+func read(queue chan format.Flatevent, name string, oldSize int64, size int64) {
+
+	config := common.ConfigHandler()
+	cred, err := azblob.NewSharedKeyCredential(config.Accountname, config.Accountkey)
+	common.Error(err)
+
+	location := "https://" + config.Accountname + "." + config.Cloud
+	client, err := azblob.NewClientWithSharedKeyCredential(location, cred, nil)
+	common.Error(err)
+
+	ctx := context.Background()
+	httpRange := azblob.HTTPRange{
+		Offset: oldSize + 1,
+		Count:  size - oldSize,
+	}
+
+	dso := &azblob.DownloadStreamOptions{
+		Range: httpRange,
+		AccessConditions: &blob.AccessConditions{
+			ModifiedAccessConditions: &blob.ModifiedAccessConditions{
+				IfModifiedSince: modtime(),
+			},
+		},
+	}
+
+	get, err := client.DownloadStream(ctx, config.ContainerName, name, dso)
+	//get, err := client.DownloadStream(ctx, config.ContainerName, name, nil)
+	common.Error(err)
+
+	downloadedData := bytes.Buffer{}
+	// TODO if format == json...???
+	// TODO: account for the missing header in case of partial reads
+	if oldSize > 0 {
+		prefix := []byte("{\"message\": {")
+		downloadedData.Write(prefix)
+	}
+
+	retryReader := get.NewRetryReader(ctx, &azblob.RetryReaderOptions{})
+	_, err = downloadedData.ReadFrom(retryReader)
+	common.Error(err)
+	//fmt.Println(downloadedData.String())
+
+	err = retryReader.Close()
+	common.Error(err)
+
+	// TODO: should make a distinction between log formats, grok lines, json lines, json structures
+	// TODO: but can only do that at the output package ... should tell the queue if the content is flatevent, line or raw
+	// for flowlogs, parse the json into a flatevent struct and push it into the queue
+	// nsgflowlog(queue, downloadedData.Bytes(), name)
+	// vnetflowlog(queue, downloadedData.Bytes(), name)
+	// maybe also flag what source this comes from?
+
+	// parse the json into a flatevent struct and push it into the queue
+	if config.Type == "nsgflowlog" {
+		nsgflowlog(queue, downloadedData.Bytes(), name)
+	}
+	if config.Type == "vnetflowlog" {
+		vnetflowlog(queue, downloadedData.Bytes(), name)
+	}
+}
+
+func loadRegistry(path string) (map[string]int64, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return make(map[string]int64), err
+	}
+	defer file.Close()
+
+	var registry map[string]int64
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(&registry)
+	if err != nil {
+		return make(map[string]int64), err
+	}
+	return registry, nil
+}
+
+// TODO: why the -24? ... is this to process one day?
+func modtime() *time.Time {
+	t := time.Now().Add(-24 * time.Hour)
+	return &t
+}
+
+func saveRegistry(path string, filelist map[string]int64) {
+	// resourceId=/SUBSCRIPTIONS/F5DD6E2D-1F42-4F54-B3BD-DBF595138C59/RESOURCEGROUPS/VM/PROVIDERS/MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/OCTOBER-NSG/y=2023/m=10/d=31/h=17/m=00/macAddress=002248A31CA3/PT1H.json
+	// resourceId=/SUBSCRIPTIONS/F5DD6E2D-1F42-4F54-B3BD-DBF595138C59/RESOURCEGROUPS/VM/PROVIDERS/MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/OCTOBER-NSG/y=2023/m=10/d=31/h=18/m=00/macAddress=002248A31CA3/PT1H.json
+	// y=2023/m=10/d=31/h=18/m=00/macAddress=002248A31CA3/PT1H.json
+	file, err := os.Create(path)
+	common.Error(err)
+	defer file.Close()
+	encoder := json.NewEncoder(file)
+	encoder.SetIndent("", "  ")
+	err = encoder.Encode(filelist)
+	common.Error(err)
+}
+
+// TODO Why not save this straight as a string timestamp instead of a json!?
+func readTimestamp(path string) (Stamp, error) {
+	var ts Stamp
+
+	file, err := os.Open(path)
+	common.Error(err)
+	defer file.Close()
+
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(&ts)
+	return ts, err
+}
+
+func writeTimestamp(path string, t time.Time) error {
+	ts := Stamp{
+		Year:   t.Year(),
+		Month:  int(t.Month()),
+		Day:    t.Day(),
+		Hour:   t.Hour(),
+		Minute: t.Minute(),
+	}
+
+	file, err := os.Create(path)
+	common.Error(err)
+	defer file.Close()
+
+	encoder := json.NewEncoder(file)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(ts)
 }
 
 /*
@@ -222,121 +357,3 @@ func fullRead(queue chan format.Flatevent, name string) {
 
 }
 */
-
-// Read the files with the httpRange
-func read(queue chan format.Flatevent, name string, oldSize int64, size int64) {
-
-	config := common.ConfigHandler()
-	cred, err := azblob.NewSharedKeyCredential(config.Accountname, config.Accountkey)
-	common.Error(err)
-
-	location := "https://" + config.Accountname + "." + config.Cloud
-	client, err := azblob.NewClientWithSharedKeyCredential(location, cred, nil)
-	common.Error(err)
-
-	ctx := context.Background()
-	httpRange := azblob.HTTPRange{
-		Offset: oldSize + 1,
-		Count:  size - oldSize,
-	}
-
-	dso := &azblob.DownloadStreamOptions{
-		Range: httpRange,
-		AccessConditions: &blob.AccessConditions{
-			ModifiedAccessConditions: &blob.ModifiedAccessConditions{
-				IfModifiedSince: modtime(),
-			},
-		},
-	}
-
-	get, err := client.DownloadStream(ctx, config.ContainerName, name, dso)
-	//get, err := client.DownloadStream(ctx, config.ContainerName, name, nil)
-	common.Error(err)
-
-	downloadedData := bytes.Buffer{}
-	// TODO: account for the missing header in case of partial reads
-	if oldSize > 0 {
-		prefix := []byte("{\"message\": {")
-		downloadedData.Write(prefix)
-	}
-
-	retryReader := get.NewRetryReader(ctx, &azblob.RetryReaderOptions{})
-	_, err = downloadedData.ReadFrom(retryReader)
-	common.Error(err)
-	//fmt.Println(downloadedData.String())
-
-	err = retryReader.Close()
-	common.Error(err)
-
-	// TODO: should make a distinction between log types, grok lines, json lines, json structures
-	// parse the json into a flatevent struct and push it into the queue
-	// nsgflowlog(queue, downloadedData.Bytes(), name)
-	// vnetflowlog(queue, downloadedData.Bytes(), name)
-
-	// parse the json into a flatevent struct and push it into the queue
-	nsgflowlog(queue, downloadedData.Bytes(), name)
-}
-
-func modtime() *time.Time {
-	t := time.Now().Add(-24 * time.Hour)
-	return &t
-}
-
-func loadRegistry(path string) (map[string]int64, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return make(map[string]int64), err
-	}
-	defer file.Close()
-
-	var registry map[string]int64
-	decoder := json.NewDecoder(file)
-	err = decoder.Decode(&registry)
-	if err != nil {
-		return make(map[string]int64), err
-	}
-	return registry, nil
-}
-
-func saveRegistry(path string, filelist map[string]int64) {
-	// resourceId=/SUBSCRIPTIONS/F5DD6E2D-1F42-4F54-B3BD-DBF595138C59/RESOURCEGROUPS/VM/PROVIDERS/MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/OCTOBER-NSG/y=2023/m=10/d=31/h=17/m=00/macAddress=002248A31CA3/PT1H.json
-	// resourceId=/SUBSCRIPTIONS/F5DD6E2D-1F42-4F54-B3BD-DBF595138C59/RESOURCEGROUPS/VM/PROVIDERS/MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/OCTOBER-NSG/y=2023/m=10/d=31/h=18/m=00/macAddress=002248A31CA3/PT1H.json
-	// y=2023/m=10/d=31/h=18/m=00/macAddress=002248A31CA3/PT1H.json
-	file, err := os.Create(path)
-	common.Error(err)
-	defer file.Close()
-	encoder := json.NewEncoder(file)
-	encoder.SetIndent("", "  ")
-	err = encoder.Encode(filelist)
-	common.Error(err)
-}
-
-func readTimestamp(path string) (Stamp, error) {
-	var ts Stamp
-
-	file, err := os.Open(path)
-	common.Error(err)
-	defer file.Close()
-
-	decoder := json.NewDecoder(file)
-	err = decoder.Decode(&ts)
-	return ts, err
-}
-
-func writeTimestamp(path string, t time.Time) error {
-	ts := Stamp{
-		Year:   t.Year(),
-		Month:  int(t.Month()),
-		Day:    t.Day(),
-		Hour:   t.Hour(),
-		Minute: t.Minute(),
-	}
-
-	file, err := os.Create(path)
-	common.Error(err)
-	defer file.Close()
-
-	encoder := json.NewEncoder(file)
-	encoder.SetIndent("", "  ")
-	return encoder.Encode(ts)
-}

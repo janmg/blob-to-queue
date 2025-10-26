@@ -94,7 +94,15 @@ func addtuples(event format.Flatevent, nsgflow string) format.Flatevent {
 	event.DstIP = tups[2]
 	event.SrcPort = tups[3]
 	event.DstPort = tups[4]
-	event.Proto = tups[5]
+	switch tups[5] {
+	// Now an IANA protocol number
+	case "T":
+		event.Proto = 6
+	case "U":
+		event.Proto = 8
+	case "I":
+		event.Proto = 11
+	}
 	event.Direction = tups[6]
 	event.Action = tups[7]
 	if event.Version == 2 {

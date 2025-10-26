@@ -14,12 +14,17 @@ accountKey: "AMWvXjw=="
 containerName: "insights-logs-networksecuritygroupflowevent"
 ## Defaults
 #cloud: "blob.core.windows.net"
-#format: "json"
-#type: "nsgflowlog"
+#type: "nsgflowlog" //vnetflowlog
+#format: "json" // "json_lines","lines","raw"
+
 timestamp: "timestamp.json"
 registry: "registry.dat"
 resumepolicy: "timestamp"
 interval: 60
+path_prefix: "/SUBSCRIPTIONS/F5DD6E2D-1F42-4F54-B3BD-DBF595138C59/RESOURCEGROUPS/VM/PROVIDERS/MICROSOFT.NETWORK/OCTOBER-NSG"
+#"resourceId=/SUBSCRIPTIONS/F5DD6E2D-1F42-4F54-B3BD-DBF595138C59/RESOURCEGROUPS/VM/PROVIDERS/MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/OCTOBER-NSG/y=2023/m=10/d=31/h=18/m=00"path_prefix", "['**/*']")  // array of prefixes a path must start with, "resourceId=/SUBSCRIPTIONS/F5DD6E2D-1F42-4F54-B3BD-DBF595138C59/RESOURCEGROUPS/VM/PROVIDERS/MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/OCTOBER-NSG/"
+path_include: ['PT1H.json']
+#path_filter: ['*.xml','*.png']
 
 # Because golang does not support "infinite" channels, we set a maximum size for the queue. The watermark is the size until we stop reading in more data, the difference between qsize and qwatermark should be the amount of events that can be stored in a single file.
 qsize: 20000
@@ -35,7 +40,7 @@ qwatermark: 16000
 # format can be csv, flat, ecs, avro
 
 # Bit of a hack, but I don't know how to deal with multiple outputs
-output: ["elasticsearch","stdout","file"]
+output: ["stdout","file","summary","elasticsearch","eventhub","kafka","ampq","mqtt","keyval"]
 
 # output to stdout
 stdout:
@@ -78,7 +83,7 @@ mqtt:
 # output to elasticsearch
 elasticsearch:
   addresses: "https://10.0.0.247:9200"
-#	serviceToken: "AAEAAWVsYXRmEtblE"
+  serviceToken: "AAEAAWVsYXRmEtblE"
   format: "ecs"
   index: "nsg-"
   intercal: 1w

@@ -61,40 +61,48 @@ func main() {
 	go input.Blobworker(queue)
 
 	// Read from the queue and decide what to do with the output
+	// TODO: Shouldn't this be a while loop?
 	send(queue)
 }
 
 func send(queue <-chan format.Flatevent) {
+	// TODO: Should prefix the queue with the source format (json, json_lines, lines?)
+	// TODO: do flatevents also work from vnetflowlogs?
+	//
 	// Read from the queue and decide what to do with the output
 	for {
-		nsg := <-queue
-		//fmt.Println(format("csv", nsg))
+		event := <-queue
+		//fmt.Println(format("csv", event))
 		// TODO: filter?
 
 		for _, out := range config.Output {
 			switch out {
 			case "elasticsearch":
-				output.SendElasticsearch(nsg)
+				output.SendElasticsearch(event)
 			case "eventhub":
-				output.SendAzure(nsg)
+				output.SendAzure(event)
 			case "kafka":
-				output.SendKafka(nsg)
+				output.SendKafka(event)
 			case "mqtt":
-				output.SendMQTT(nsg)
+				output.SendMQTT(event)
 			case "ampq":
-				output.SendAMPQ(nsg)
+				output.SendAMPQ(event)
 			case "zeromq":
-				output.SendZERO(nsg)
+				output.SendZERO(event)
 			case "keyval":
-				output.SendKeyval(nsg)
+				output.SendKeyval(event)
 			case "redis":
-				output.SendRedis(nsg)
+				output.SendRedis(event)
+			case "fluent":
+				output.SendFluent(event)
+			case "fluxdb":
+				output.SendFlux(event)
 			case "file":
-				output.AppendFile(nsg)
+				output.AppendFile(event)
 			case "stdout":
-				output.Stdout(nsg)
+				output.Stdout(event)
 			case "summary":
-				output.Statistics(nsg)
+				output.Statistics(event)
 			}
 		}
 	}

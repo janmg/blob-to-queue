@@ -8,7 +8,7 @@ type Flatevent struct {
 	FlowLogVersion    string    `json:"flowlogversion"`
 	FlowLogGUID       string    `json:"flowlogguid"`
 	SystemID          string    `json:"systemId"`
-	MACAdress         string    `json:"macAddress"`
+	MacAddress        string    `json:"macAddress"`
 	Category          string    `json:"category"`
 	ResourceID        string    `json:"resourceId"`
 	FlowLogResourceID string    `json:"flowlogresourceid"`
@@ -17,19 +17,21 @@ type Flatevent struct {
 	Version           int       `json:"Version"`
 	ACLID             string    `json:"aclid"`
 	Rule              string    `json:"rule"`
+	FlowTuples        []string  `json:"flowTuples"`
 	Mac               string    `json:"mac"`
 	Unixtime          string    `json:"unixtime"`
 	SrcIP             string    `json:"srcip"`
 	DstIP             string    `json:"dstip"`
 	SrcPort           string    `json:"srcport"`
 	DstPort           string    `json:"dstport"`
-	Proto             string    `json:"proto"` // I would have liked Proto to be an int, but nsgflowlogs uses the letters T and U for TCP and UDP instead
-	Direction         string    `json:"direction"`
-	Action            string    `json:"action"`
-	State             string    `json:"state"`
-	Encryption        bool      `json:"encryption"`
-	SrcPackets        int       `json:"srcpackets"`
-	SrcBytes          int       `json:"srcbytes"`
-	DstPackets        int       `json:"dstpackets"`
-	DstBytes          int       `json:"dstbytes"`
+	// Proto             string    `json:"proto"` // I would have liked Proto to be an int, but nsgflowlogs uses the letters T and U for TCP and UDP instead
+	Proto      int    `json:"proto"` // TCP=x, UDP=y, ICMP=z, DSCP=?
+	Direction  string `json:"direction"`
+	Action     string `json:"action"`
+	State      string `json:"state"`
+	Encryption bool   `json:"encryption"`
+	SrcPackets int    `json:"srcpackets"`
+	SrcBytes   int    `json:"srcbytes"`
+	DstPackets int    `json:"dstpackets"`
+	DstBytes   int    `json:"dstbytes"`
 }

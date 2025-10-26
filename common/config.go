@@ -17,9 +17,14 @@ type Config struct {
 	Resumepolicy  string   `mapstructure:"resumepolicy"`
 	Timestamp     string   `mapstructure:"timestamp"`
 	Registry      string   `mapstructure:"registry"`
+	PathPrefix    []string `mapstructure:"path_prefix"`
+	PathInclude   []string `mapstructure:"path_include"`
+	PathFilter    []string `mapstructure:"path_filter"`
 	Interval      int      `mapstructure:"interval"`
 	Qsize         int      `mapstructure:"qsize"`
 	Qwatermark    int      `mapstructure:"qwaterwark"`
+	Format        string   `mapstructure:"format"`
+	Type          string   `mapstructure:"type"`
 	Output        []string `mapstructure:"output"`
 }
 
@@ -47,7 +52,6 @@ func ConfigHandler() Config {
 	conf.SetDefault("timestamp", "./timestamp.json")
 	conf.SetDefault("startpolicy", "start_over")
 	// ['start_over','start_fresh']
-
 	conf.SetDefault("output", "stdout")
 	conf.SetDefault("interval", 60)
 
@@ -55,7 +59,8 @@ func ConfigHandler() Config {
 	conf.SetDefault("path_prefix", "['**/*']")  // array of prefixes a path must start with, "resourceId=/SUBSCRIPTIONS/F5DD6E2D-1F42-4F54-B3BD-DBF595138C59/RESOURCEGROUPS/VM/PROVIDERS/MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/OCTOBER-NSG/"
 	conf.SetDefault("path_include", "['**/*']") // array of strings that must occur, non-matching paths are ignored
 	conf.SetDefault("path_filter", "['**/*']")  // array of strings that will be filtered out
-
+	conf.SetDefault("type", "nsgflowlog")
+	conf.SetDefault("format", "json")
 	/*
 		filtering down path list, only look for subdirectories and files that start with a path, then only qualify the paths that fit the filter, then exclude some that you don't want
 		prefix: resourceId=/SUBSCRIPTIONS/F5DD6E2D-1F42-4F54-B3BD-DBF595138C59/RESOURCEGROUPS/VM
@@ -64,7 +69,6 @@ func ConfigHandler() Config {
 	*/
 
 	conf.SetConfigFile("blob-to-queue.yaml")
-	// TODO add default config file and one that contains my private secrets
 	conf.SetConfigType("yaml")
 	conf.AddConfigPath(".")
 	err := conf.ReadInConfig()
@@ -96,5 +100,10 @@ func configPrint(conf Config) {
 	fmt.Println(conf.Timestamp)
 	fmt.Println(conf.Interval)
 	fmt.Println(conf.Registry)
+	fmt.Println(conf.PathPrefix)
+	fmt.Println(conf.PathInclude)
+	fmt.Println(conf.PathFilter)
+	fmt.Println(conf.Type)
+	fmt.Println(conf.Format)
 	fmt.Println(conf.Output)
 }
