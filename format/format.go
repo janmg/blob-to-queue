@@ -75,20 +75,32 @@ func format_ecs(flat Flatevent) string {
 	var socket string
 	if flat.Direction == "I" {
 		event.Network.Fields.NetworkTransport.Name = "incoming"
-		socket = flat.Proto + "/" + flat.SrcIP + ":" + flat.SrcPort + "-" + flat.DstIP + ":" + flat.DstPort
+		socket = fmt.Sprintf("%d/%s:%s-%s:%s", flat.Proto, flat.SrcIP, flat.SrcPort, flat.DstIP, flat.DstPort)
 	}
-	if flat.Action == "O" {
+	switch flat.Direction {
+	case "O":
 		event.Network.Fields.NetworkTransport.Name = "outgoing"
-		socket = flat.Proto + "/" + flat.DstIP + ":" + flat.DstPort + "-" + flat.SrcIP + ":" + flat.SrcPort
+		socket = fmt.Sprintf("%d/%s:%s-%s:%s", flat.Proto, flat.DstIP, flat.DstPort, flat.SrcIP, flat.SrcPort)
+	case "I":
+		event.Network.Fields.NetworkTransport.Name = "incoming"
+		socket = fmt.Sprintf("%d/%s:%s-%s:%s", flat.Proto, flat.SrcIP, flat.SrcPort, flat.DstIP, flat.DstPort)
 	}
-	// TODO add default
-	if flat.Action == "U" {
+
+	switch proto_to_string(flat.Proto) {
+	case "I":
+		event.Network.Fields.NetworkTransport.Name = "icmp"
+		socket = fmt.Sprintf("%s/%s:%s-%s:%s", strconv.Itoa(flat.Proto), flat.SrcIP, flat.SrcPort, flat.DstIP, flat.DstPort)
+	case "U":
 		event.Network.Fields.NetworkTransport.Name = "udp"
-	}
-	if flat.Action == "T" {
+		socket = fmt.Sprintf("%s/%s:%s-%s:%s", strconv.Itoa(flat.Proto), flat.SrcIP, flat.SrcPort, flat.DstIP, flat.DstPort)
+	case "T":
 		event.Network.Fields.NetworkTransport.Name = "tcp"
+		socket = fmt.Sprintf("%s/%s:%s-%s:%s", strconv.Itoa(flat.Proto), flat.SrcIP, flat.SrcPort, flat.DstIP, flat.DstPort)
+	default:
+		event.Network.Fields.NetworkTransport.Name = "unknown"
+		socket = fmt.Sprintf("%s/unknown", strconv.Itoa(flat.Proto))
 	}
-	// TODO traceid is the socket T/10.0.0.5:1024-10.0.0.4:443 for the incoming direction source to destination, must flip src and dst to trace
+	// Note: traceid uses the socket format (proto/srcIP:srcPort-dstIP:dstPort) for tracing bidirectional flows
 	event.Tracing.Fields.TraceID.Name = socket
 	event.Network.Fields.NetworkBytes.Name = fmt.Sprint(flat.SrcBytes + flat.DstBytes)
 	event.Network.Fields.NetworkPackets.Name = fmt.Sprint(flat.SrcPackets + flat.DstPackets)

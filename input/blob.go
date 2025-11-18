@@ -46,9 +46,9 @@ func Blobworker(queue chan format.Flatevent) {
 		fmt.Printf("Resuming from timestamp: %v\n", last)
 	} else if config.Resumepolicy == "registry" {
 		// Read the registry if it exists
-		// TODO: startpolicy, if it is start_over, then clear the registry and start from scratch
 		if config.Startpolicy == "start_over" {
 			fmt.Println("Starting over, clearing the registry")
+			os.Remove(config.Registry) // Delete the registry file
 			registry = make(map[string]int64)
 		} else {
 			var err error
@@ -108,20 +108,20 @@ func doLoop(config common.Config, queue chan format.Flatevent, registry map[stri
 
 	// Read based on modified flags
 
-	// TODO: This lists the files based on the registry!?
 	fmt.Println("Listing the blobs in the container:")
 	for name, size := range filelist {
-		if oldSize, exists := registry[name]; !exists || oldSize != size {
-			//convert to log item
+		if oldSize, exists := registry[name]; exists && oldSize != size {
+			// File exists in registry and size changed - PARTIAL READ
 			fmt.Printf("%s grew by %d bytes\n", name, size-oldSize)
 			read(queue, name, oldSize, size)
 			partialfiles++
-		} else {
-			//convert to log item
+		} else if !exists {
+			// File doesn't exist in registry - NEW FILE
 			fmt.Printf("%s is new and has %d bytes\n", name, size)
 			read(queue, name, 0, size)
 			fullfiles++
 		}
+		// If exists and size unchanged, skip processing
 	}
 	//convert to log item
 	fmt.Printf("Found %d new files and %d updated files\n", fullfiles, partialfiles)
@@ -159,7 +159,7 @@ func listFiles(resumepolicy string, account string, key string, location string)
 	})
 
 	for pager.More() {
-		resp, err := pager.NextPage(context.TODO())
+		resp, err := pager.NextPage(context.Background())
 		common.Error(err)
 
 		for _, blob := range resp.Segment.BlobItems {

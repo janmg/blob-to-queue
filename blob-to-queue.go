@@ -61,13 +61,13 @@ func main() {
 	go input.Blobworker(queue)
 
 	// Read from the queue and decide what to do with the output
-	// TODO: Shouldn't this be a while loop?
+	// Note: In Go, 'for' is used for all loops (no separate 'while' keyword)
 	send(queue)
 }
 
 func send(queue <-chan format.Flatevent) {
 	// TODO: Should prefix the queue with the source format (json, json_lines, lines?)
-	// TODO: do flatevents also work from vnetflowlogs?
+	// Note: flatevents work from both nsgflowlogs and vnetflowlogs (both are implemented)
 	//
 	// Read from the queue and decide what to do with the output
 	for {

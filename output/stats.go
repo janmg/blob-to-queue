@@ -1,7 +1,6 @@
 package output
 
 import (
-	"fmt"
 	"strconv"
 
 	"janmg.com/blob-to-queue/common"
@@ -25,14 +24,14 @@ func Statistics(nsg format.Flatevent) {
 	src := nsg.SrcIP + "_" + nsg.SrcPort
 	dst := nsg.DstIP + "_" + nsg.DstPort
 
-	socket := nsg.Proto + "/" + src + "-" + dst
+	socket := strconv.Itoa(nsg.Proto) + "/" + src + "-" + dst
 	outbytes := nsg.SrcBytes
 	inbytes := nsg.DstBytes
 	outpack := nsg.SrcPackets
 	inpack := nsg.DstPackets
 
 	if nsg.Direction == "O" {
-		socket = nsg.Proto + "/" + dst + "-" + src
+		socket = strconv.Itoa(nsg.Proto) + "/" + dst + "-" + src
 		inbytes = nsg.SrcBytes
 		outbytes = nsg.DstBytes
 		inpack = nsg.SrcPackets
@@ -42,7 +41,14 @@ func Statistics(nsg format.Flatevent) {
 	// 1698775873,10.0.0.4,52.239.137.164,57756,443,T,O,A,B,,,,
 	// 1698775879,10.0.0.4,52.239.137.164,57756,443,T,O,A,E,8,1474,18,18980
 	// be more clever when it comes to TCP with B,x,E packets and UDP, and the deal with socket timeout?
-	if nsg.Proto == "T" {
+	// protocol constants based on IANA protocol numbers
+	const (
+		ICMP = 1
+		TCP  = 6
+		UDP  = 17
+	)
+
+	if nsg.Proto == TCP {
 		if nsg.State == "B" {
 			stats[socket] = summary{}
 		} else {
@@ -54,13 +60,29 @@ func Statistics(nsg format.Flatevent) {
 				// not B and not found ... mmh
 				stats[socket] = summary{}
 				stats[socket] = summary{unix, stats[socket].inbytes + inbytes, stats[socket].outbytes + outbytes, stats[socket].inpack + inpack, stats[socket].outpack + outpack}
-				fmt.Printf(fmt.Sprintf("out of sync? no previous packet captured and not previously found? %s\n", socket))
 			}
 		}
-		// lookup from map src+"-"+dst and dst+"-"+src, check time
+
+		/*
+			if nsg.Proto == protoTCP {
+			if nsg.State == "B" {
+				stats[socket] = summary{unix, 0, 0, 0, 0}
+			} else {
+				// find socket from map
+				_, found := stats[socket]
+				if found {
+					stats[socket] = summary{unix, stats[socket].inbytes + inbytes, stats[socket].outbytes + outbytes, stats[socket].inpack + inpack, stats[socket].outpack + outpack}
+				} else {
+					// not B and not found ... mmh
+					stats[socket] = summary{unix, inbytes, outbytes, inpack, outpack}
+					fmt.Printf("out of sync? no previous packet captured and not previously found? %s\n", socket)
+				}
+			}
+			// lookup from map src+"-"+dst and dst+"-"+src, check time
+		*/
 	}
 
-	if nsg.Proto == "U" {
+	if nsg.Proto == UDP {
 		// lookup from map src+"-"+dst and dst+"-"+src, check time
 		_, found := stats[socket]
 		if !found {
