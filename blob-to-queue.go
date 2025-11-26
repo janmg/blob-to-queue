@@ -61,7 +61,7 @@ func main() {
 	go input.Blobworker(queue)
 
 	// Read from the queue and decide what to do with the output
-	// Note: In Go, 'for' is used for all loops (no separate 'while' keyword)
+	// TODO: Shouldn't this be a for loop?
 	send(queue)
 }
 

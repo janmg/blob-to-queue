@@ -67,7 +67,7 @@ func nsgflowlog(queue chan<- format.Flatevent, flowlogs []byte, blobname string)
 		var event format.Flatevent
 		event.Time = elements.Time
 		event.SystemID = elements.SystemID
-		event.MACAdress = elements.MacAddress
+		event.MacAddress = elements.MacAddress
 		event.Category = elements.Category
 		event.ResourceID = elements.ResourceID
 		event.OperationName = elements.OperationName
@@ -79,7 +79,13 @@ func nsgflowlog(queue chan<- format.Flatevent, flowlogs []byte, blobname string)
 				for _, tuples := range flow.FlowTuples {
 					event = addtuples(event, tuples)
 					queue <- event
-					// TODO: do some wait event if channel is full?
+					// Check if queue is over 80% capacity
+					queueLen := len(queue)
+					queueCap := cap(queue)
+					if queueLen > int(float64(queueCap)*0.8) {
+						fmt.Printf("WARNING: Queue is at %d/%d (%.1f%%), pausing to prevent overflow\n", queueLen, queueCap, float64(queueLen)/float64(queueCap)*100)
+						time.Sleep(5 * time.Second)
+					}
 					count++
 				}
 			}

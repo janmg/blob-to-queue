@@ -31,7 +31,7 @@ func SendFlux(nsg format.Flatevent) {
 
 	// Create a new point batch
 	bp, err := client.NewBatchPoints(client.BatchPointsConfig{
-		Database:  MyDB,
+		Database:  dbname,
 		Precision: "s",
 	})
 	if err != nil {

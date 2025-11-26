@@ -22,11 +22,17 @@ type Stamp struct {
 	Minute int `json:"minute"`
 }
 
+type FileMetadata struct {
+	ContentLength int64     `json:"content_length"`
+	ContentRead   int64     `json:"content_read"`
+	LastModified  time.Time `json:"last_modified"`
+}
+
 func Blobworker(queue chan format.Flatevent) {
 	config := common.ConfigHandler()
 
 	// The registry is the list of files already processed, the filelist is a list of currently seen files, than read the diffence and process the files
-	var registry map[string]int64 = make(map[string]int64)
+	var registry map[string]FileMetadata = make(map[string]FileMetadata)
 
 	// NSGFlowLogs grow in predictable directories and files, only need to keep a timestamp pointer to the last processed directory, other files may have arbitrary names and the registry will track which files are new and which ones have grown.
 	// https://pkg.go.dev/time
@@ -49,13 +55,13 @@ func Blobworker(queue chan format.Flatevent) {
 		if config.Startpolicy == "start_over" {
 			fmt.Println("Starting over, clearing the registry")
 			os.Remove(config.Registry) // Delete the registry file
-			registry = make(map[string]int64)
+			registry = make(map[string]FileMetadata)
 		} else {
 			var err error
 			fmt.Println("Resuming from the registry")
 			registry, err = loadRegistry("registry.json")
 			if err != nil {
-				registry = make(map[string]int64)
+				registry = make(map[string]FileMetadata)
 				fmt.Println("Can't read registry for start_fresh, will start_over instead")
 			}
 		}
@@ -74,7 +80,7 @@ func Blobworker(queue chan format.Flatevent) {
 	}
 }
 
-func doLoop(config common.Config, queue chan format.Flatevent, registry map[string]int64, last Stamp) {
+func doLoop(config common.Config, queue chan format.Flatevent, registry map[string]FileMetadata, last Stamp) {
 	// Should use a queue to signal that it's time to stop the ingress
 	for i := 0; len(queue) > config.Qwatermark; i++ {
 		fmt.Printf("Hit watermark, queue is at %d pause for 10 seconds", len(queue))
@@ -85,7 +91,7 @@ func doLoop(config common.Config, queue chan format.Flatevent, registry map[stri
 	}
 
 	location := "https://" + config.Accountname + "." + config.Cloud
-	fmt.Println(location)
+	// fmt.Println(location)
 
 	// list all the nsg's
 	// resourceId=/SUBSCRIPTIONS/F5DD6E2D-1F42-4F54-B3BD-DBF595138C59/RESOURCEGROUPS/VM/PROVIDERS/MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/
@@ -95,30 +101,32 @@ func doLoop(config common.Config, queue chan format.Flatevent, registry map[stri
 	//	resourceId=/SUBSCRIPTIONS/F5DD6E2D-1F42-4F54-B3BD-DBF595138C59/RESOURCEGROUPS/VM/PROVIDERS/MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/
 
 	// 1. Lists all the files in the remote storage account that match the path prefix
-	var filelist map[string]int64 = make(map[string]int64)
-	filelist = listFiles(config.Resumepolicy, config.Accountname, config.Accountkey, location)
+	var filelist map[string]FileMetadata = make(map[string]FileMetadata)
+	filelist = listFiles(config.Resumepolicy, config.Accountname, config.Accountkey, location, last)
+	//fmt.Printf("Received filelist with %d entries\n", len(filelist))
 	var fullfiles = 0
 	var partialfiles = 0
 
 	// 2. Filters on path_filters to only include files that match the directory and file glob (**/*.json)
 	// TODO: filter on the timestamp so that only fresh files get processed
 
-	// 3. Compare the list of files to the the registry with the new filelist and read the
+	// 3. Compare the list of files to the the registry with the new filelist
+
 	// 4. Process the worklist and put all events in the logstash queue.
 
 	// Read based on modified flags
 
 	fmt.Println("Listing the blobs in the container:")
-	for name, size := range filelist {
-		if oldSize, exists := registry[name]; exists && oldSize != size {
+	for name, metadata := range filelist {
+		if oldMeta, exists := registry[name]; exists && oldMeta.ContentLength != metadata.ContentLength {
 			// File exists in registry and size changed - PARTIAL READ
-			fmt.Printf("%s grew by %d bytes\n", name, size-oldSize)
-			read(queue, name, oldSize, size)
+			fmt.Printf("%s grew by %d bytes\n", name, metadata.ContentLength-oldMeta.ContentLength)
+			read(queue, name, oldMeta.ContentLength, metadata.ContentLength)
 			partialfiles++
 		} else if !exists {
 			// File doesn't exist in registry - NEW FILE
-			fmt.Printf("%s is new and has %d bytes\n", name, size)
-			read(queue, name, 0, size)
+			fmt.Printf("%s is new and has %d bytes\n", name, metadata.ContentLength)
+			read(queue, name, 0, metadata.ContentLength)
 			fullfiles++
 		}
 		// If exists and size unchanged, skip processing
@@ -141,9 +149,9 @@ func doLoop(config common.Config, queue chan format.Flatevent, registry map[stri
 	// 7. If stop signal comes, finish the current file, save the registry and quit
 }
 
-func listFiles(resumepolicy string, account string, key string, location string) map[string]int64 {
+func listFiles(resumepolicy string, account string, key string, location string, last Stamp) map[string]FileMetadata {
 	config := common.ConfigHandler()
-	var filelist map[string]int64 = make(map[string]int64)
+	var filelist map[string]FileMetadata = make(map[string]FileMetadata)
 
 	cred, err := azblob.NewSharedKeyCredential(config.Accountname, config.Accountkey)
 	common.Error(err)
@@ -162,27 +170,33 @@ func listFiles(resumepolicy string, account string, key string, location string)
 		resp, err := pager.NextPage(context.Background())
 		common.Error(err)
 
+		fmt.Printf("Processing page with %d blobs\n", len(resp.Segment.BlobItems))
 		for _, blob := range resp.Segment.BlobItems {
-
+			// generated.BlobProperties {ETag: *"0x8DE2CCA4087FF97", LastModified: *time.Time(2025-11-26T09:00:31Z){wall: 0, ext: 63899744431, loc: *(*time.Location)(0xc00005af50)}, ACL: *string nil, AccessTier: *"Hot", AccessTierChangeTime: *time.Time nil, AccessTierInferred: *true, ArchiveStatus: *github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/internal/generated.ArchiveStatus nil, BlobSequenceNumber: *int64 nil, BlobType: *"BlockBlob", CacheControl: *"", ContentDisposition: *"", ContentEncoding: *"", ContentLanguage: *"", ContentLength: *108487, ContentMD5: []uint8 len: 0, cap: 0, nil, ContentType: *"application/octet-stream", CopyCompletionTime: *time.Time nil, CopyID: *string nil, CopyProgress: *string nil, CopySource: *string nil, CopyStatus: *github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/internal/generated.CopyStatusType nil, CopyStatusDescription: *string nil, CreationTime: *time.Time(2025-11-26T08:09:31Z){wall: 0, ext: 63899741371, loc: *(*time.Location)(0xc00005aee0)}, CustomerProvidedKeySHA256: *string nil, DeletedTime: *time.Time nil, DestinationSnapshot: *string nil, EncryptionScope: *string nil, ExpiresOn: *time.Time nil, Group: *string nil, ImmutabilityPolicyExpiresOn: *time.Time nil, ImmutabilityPolicyMode: *github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/internal/generated.ImmutabilityPolicyMode nil, IncrementalCopy: *bool nil, IsSealed: *bool nil, LastAccessedOn: *time.Time nil, LeaseDuration: *github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/internal/generated.LeaseDurationType nil, LeaseState: *"available", LeaseStatus: *"unlocked", LegalHold: *bool nil, Owner: *string nil, Permissions: *string nil, RehydratePriority: *github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/internal/generated.RehydratePriority nil, RemainingRetentionDays: *int32 nil, ResourceType: *string nil, ServerEncrypted: *true, TagCount: *int32 nil}
 			// TODO: this filter could keep track of the last file being read, but what about partial reads.
 			// Needs tracking of which files were read, for flowlogs should use the date/time in the directory structure, only need to remember last processed file
-			/*
-				if *blob.Name > "resourceId=/SUBSCRIPTIONS/F5DD6E2D-1F42-4F54-B3BD-DBF595138C59/RESOURCEGROUPS/VM/PROVIDERS/MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/OCTOBER-NSG/y=2023/m=10/d=31/h=18/m=00" {
-					fmt.Println(*blob.Name)
 
-				}
-			*/
+			// Filter on BlobType BlockBlob
+			fmt.Println(*blob.Name)
 			if config.Resumepolicy == "timestamp" {
-				// Filter out based on timestamp
-				// Take the last 27 characters from the file. Compare it to the string of the last processed file and only use the once with a newer timestamp
-				// process last bit of the filepath and convert it to a date
-				// y=2023/m=10/d=31/h=13/m=00/
-				// filestamp := "/"+t.Year()+"/"+t.Month()+"/"+t.Day()+"/"+t.Hour()+"/"+t.Minute()
-				if blob.Name > lastread {
-
+				if blob.Properties.LastModified.After(time.Date(last.Year, time.Month(last.Month), last.Day, last.Hour, last.Minute, 0, 0, time.UTC)) {
+					filelist[*blob.Name] = FileMetadata{
+						ContentLength: *blob.Properties.ContentLength,
+						ContentRead:   0,
+						LastModified:  *blob.Properties.LastModified,
+					}
+					fmt.Printf("Added to filelist: %s (size: %d)\n", *blob.Name, *blob.Properties.ContentLength)
+				} else {
+					fmt.Printf("Skipped (older than lastread): %s\n", *blob.Name)
 				}
 			} else {
-				filelist[*blob.Name] = *blob.Properties.ContentLength
+				// TODO: compare to registry
+				filelist[*blob.Name] = FileMetadata{
+					ContentLength: *blob.Properties.ContentLength,
+					ContentRead:   0,
+					LastModified:  *blob.Properties.LastModified,
+				}
+				// fmt.Printf("Added to filelist: %s (size: %d)\n", *blob.Name, *blob.Properties.ContentLength)
 			}
 		}
 	}
@@ -201,32 +215,33 @@ func read(queue chan format.Flatevent, name string, oldSize int64, size int64) {
 	common.Error(err)
 
 	ctx := context.Background()
-	httpRange := azblob.HTTPRange{
-		Offset: oldSize + 1,
-		Count:  size - oldSize,
-	}
 
-	dso := &azblob.DownloadStreamOptions{
-		Range: httpRange,
-		AccessConditions: &blob.AccessConditions{
-			ModifiedAccessConditions: &blob.ModifiedAccessConditions{
-				IfModifiedSince: modtime(),
+	var get azblob.DownloadStreamResponse
+	var err2 error
+
+	if oldSize > 0 {
+		// Partial read - read only the new data
+		httpRange := azblob.HTTPRange{
+			Offset: oldSize,
+			Count:  size - oldSize,
+		}
+
+		dso := &azblob.DownloadStreamOptions{
+			Range: httpRange,
+			AccessConditions: &blob.AccessConditions{
+				ModifiedAccessConditions: &blob.ModifiedAccessConditions{
+					IfModifiedSince: modtime(),
+				},
 			},
-		},
+		}
+		get, err2 = client.DownloadStream(ctx, config.ContainerName, name, dso)
+	} else {
+		// Full read - read entire file
+		get, err2 = client.DownloadStream(ctx, config.ContainerName, name, nil)
 	}
-
-	get, err := client.DownloadStream(ctx, config.ContainerName, name, dso)
-	//get, err := client.DownloadStream(ctx, config.ContainerName, name, nil)
-	common.Error(err)
+	common.Error(err2)
 
 	downloadedData := bytes.Buffer{}
-	// TODO if format == json...???
-	// TODO: account for the missing header in case of partial reads
-	if oldSize > 0 {
-		prefix := []byte("{\"message\": {")
-		downloadedData.Write(prefix)
-	}
-
 	retryReader := get.NewRetryReader(ctx, &azblob.RetryReaderOptions{})
 	_, err = downloadedData.ReadFrom(retryReader)
 	common.Error(err)
@@ -251,18 +266,18 @@ func read(queue chan format.Flatevent, name string, oldSize int64, size int64) {
 	}
 }
 
-func loadRegistry(path string) (map[string]int64, error) {
+func loadRegistry(path string) (map[string]FileMetadata, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return make(map[string]int64), err
+		return make(map[string]FileMetadata), err
 	}
 	defer file.Close()
 
-	var registry map[string]int64
+	var registry map[string]FileMetadata
 	decoder := json.NewDecoder(file)
 	err = decoder.Decode(&registry)
 	if err != nil {
-		return make(map[string]int64), err
+		return make(map[string]FileMetadata), err
 	}
 	return registry, nil
 }
@@ -273,7 +288,7 @@ func modtime() *time.Time {
 	return &t
 }
 
-func saveRegistry(path string, filelist map[string]int64) {
+func saveRegistry(path string, filelist map[string]FileMetadata) {
 	// resourceId=/SUBSCRIPTIONS/F5DD6E2D-1F42-4F54-B3BD-DBF595138C59/RESOURCEGROUPS/VM/PROVIDERS/MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/OCTOBER-NSG/y=2023/m=10/d=31/h=17/m=00/macAddress=002248A31CA3/PT1H.json
 	// resourceId=/SUBSCRIPTIONS/F5DD6E2D-1F42-4F54-B3BD-DBF595138C59/RESOURCEGROUPS/VM/PROVIDERS/MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/OCTOBER-NSG/y=2023/m=10/d=31/h=18/m=00/macAddress=002248A31CA3/PT1H.json
 	// y=2023/m=10/d=31/h=18/m=00/macAddress=002248A31CA3/PT1H.json
