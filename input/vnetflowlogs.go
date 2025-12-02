@@ -10,13 +10,6 @@ import (
 	"janmg.com/blob-to-queue/format"
 )
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // structs for extracting vnetflowlogs
 type flowrecords struct {
 	Flows []struct {
@@ -42,7 +35,7 @@ type VNETFlowLogs struct {
 	} `json:"records"`
 }
 
-func vnetflowlog(queue chan<- format.Flatevent, flowlogs []byte, blobname string) {
+func vnetflowlog(queue chan<- format.Flatevent, signal <-chan bool, flowlogs []byte, blobname string) {
 	count := 0
 
 	fmt.Printf("Processing vnetflowlog from blob: %s\n", blobname)
@@ -55,7 +48,6 @@ func vnetflowlog(queue chan<- format.Flatevent, flowlogs []byte, blobname string
 
 	if len(vnetflowlogs.Records) == 0 {
 		fmt.Println("WARNING: vnetflowlogs.Records is empty!")
-		fmt.Printf("Raw JSON (first 1000 chars): %s\n", string(flowlogs[:min(1000, len(flowlogs))]))
 		return
 	}
 
@@ -72,15 +64,16 @@ func vnetflowlog(queue chan<- format.Flatevent, flowlogs []byte, blobname string
 				for _, tuples := range flow.FlowTuples {
 					event = vnettuples(event, tuples)
 					//fmt.Println(tuples)
-					queue <- event
+
 					// Check if queue is over 80% capacity
 					queueLen := len(queue)
 					queueCap := cap(queue)
 					if queueLen > int(float64(queueCap)*0.8) {
-						fmt.Printf("WARNING: Queue is at %d/%d (%.1f%%), pausing to prevent overflow\n", queueLen, queueCap, float64(queueLen)/float64(queueCap)*100)
-						time.Sleep(5 * time.Second)
-						// TODO: use a signal to the input reader to slow down reading from blob storage
+						fmt.Printf("WARNING: Queue is at %d/%d (%.1f%%), waiting for signal to continue\n", queueLen, queueCap, float64(queueLen)/float64(queueCap)*100)
+						<-signal // Wait for signal to continue
 					}
+
+					queue <- event
 					count++
 				}
 			}

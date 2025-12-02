@@ -1,6 +1,7 @@
 package output
 
 import (
+	"encoding/json"
 	"os"
 
 	"janmg.com/blob-to-queue/common"
@@ -11,8 +12,14 @@ import (
 func AppendFile(nsg format.Flatevent) {
 	file, err := os.OpenFile("filename.log", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
 	common.Error(err)
-	if _, err = file.WriteString(format.Format("csv", nsg)); err != nil {
+	defer file.Close()
+	
+	jsonData, err := json.Marshal(nsg)
+	common.Error(err)
+	
+	if _, err = file.Write(jsonData); err != nil {
 		common.Error(err)
-		defer file.Close()
 	}
+	// Add newline after each JSON object
+	file.WriteString("\n")
 }

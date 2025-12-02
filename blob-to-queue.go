@@ -60,50 +60,52 @@ func main() {
 	// e.g. /SUBSCRIPTIONS/F5DD6E2D-1F42-4F54-B3BD-DBF595138C59/RESOURCEGROUPS/VM/PROVIDERS/MICROSOFT.NETWORK/OCTOBER-NSG
 	go input.Blobworker(queue)
 
-	// Read from the queue and decide what to do with the output
-	// TODO: Shouldn't this be a for loop?
-	send(queue)
-}
-
-func send(queue <-chan format.Flatevent) {
+	// Start output workers - Note: Currently only one output can consume from the queue
+	// For multiple outputs, need to implement a fan-out pattern with separate channels
 	// TODO: Should prefix the queue with the source format (json, json_lines, lines?)
 	// Note: flatevents work from both nsgflowlogs and vnetflowlogs (both are implemented)
-	//
-	// Read from the queue and decide what to do with the output
-	for {
-		event := <-queue
-		//fmt.Println(format("csv", event))
-		// TODO: filter?
-
-		for _, out := range config.Output {
-			switch out {
-			case "elasticsearch":
-				output.SendElasticsearch(event)
-			case "eventhub":
-				output.SendAzure(event)
-			case "kafka":
-				output.SendKafka(event)
-			case "mqtt":
-				output.SendMQTT(event)
-			case "ampq":
-				output.SendAMPQ(event)
-			case "zeromq":
-				output.SendZERO(event)
-			case "keyval":
-				output.SendKeyval(event)
-			case "redis":
-				output.SendRedis(event)
-			case "fluent":
-				output.SendFluent(event)
-			case "fluxdb":
-				output.SendFlux(event)
-			case "file":
-				output.AppendFile(event)
-			case "stdout":
-				output.Stdout(event)
-			case "summary":
-				output.Statistics(event)
-			}
+	fmt.Printf("Config outputs: %v\n", config.Output)
+	workersStarted := 0
+	for _, out := range config.Output {
+		fmt.Printf("Processing output: %s\n", out)
+		switch out {
+		case "elasticsearch":
+			fmt.Println("Launching Elasticsearch worker goroutine...")
+			go output.ElasticsearchWorker(queue)
+			workersStarted++
+		case "kafka":
+			// go output.KafkaWorker(queue)
+		case "eventhub":
+			// go output.EventHubWorker(queue)
+		case "mqtt":
+			// output.MQTTWorker(queue)
+		case "ampq":
+			// output.AMPQWorker(queue)
+		case "zeromq":
+			// output.ZEROWorker(queue)
+		case "keyval":
+			// output.KeyvalWorker(queue)
+		case "redis":
+			// output.RedisWorker(queue)
+		case "fluent":
+			// output.FluentWorker(queue)
+		case "fluxdb":
+			// output.FluxWorker(queue)
+		case "file":
+			// output.AppendFileWorker(queue)
+		case "stdout":
+			// output.StdoutWorker(queue)
+		case "summary":
+			// output.StatisticsWorker(queue)
 		}
 	}
+
+	if workersStarted == 0 {
+		fmt.Println("WARNING: No workers started! Check your config.Output settings")
+	} else {
+		fmt.Printf("Started %d worker(s)\n", workersStarted)
+	}
+
+	// Keep main running
+	select {}
 }

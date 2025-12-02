@@ -34,7 +34,7 @@ type NSGFlowLogs struct {
 	} `json:"records"`
 }
 
-func nsgflowlog(queue chan<- format.Flatevent, flowlogs []byte, blobname string) {
+func nsgflowlog(queue chan<- format.Flatevent, signal <-chan bool, flowlogs []byte, blobname string) {
 	count := 0
 	/* ChatGPT says the worker should be a concurrency pool
 	var wg sync.WaitGroup
@@ -78,14 +78,16 @@ func nsgflowlog(queue chan<- format.Flatevent, flowlogs []byte, blobname string)
 				event.Mac = flow.Mac
 				for _, tuples := range flow.FlowTuples {
 					event = addtuples(event, tuples)
-					queue <- event
+
 					// Check if queue is over 80% capacity
 					queueLen := len(queue)
 					queueCap := cap(queue)
 					if queueLen > int(float64(queueCap)*0.8) {
-						fmt.Printf("WARNING: Queue is at %d/%d (%.1f%%), pausing to prevent overflow\n", queueLen, queueCap, float64(queueLen)/float64(queueCap)*100)
-						time.Sleep(5 * time.Second)
+						fmt.Printf("WARNING: Queue is at %d/%d (%.1f%%), waiting for signal to continue\n", queueLen, queueCap, float64(queueLen)/float64(queueCap)*100)
+						<-signal // Wait for signal to continue
 					}
+
+					queue <- event
 					count++
 				}
 			}

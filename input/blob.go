@@ -258,11 +258,25 @@ func read(queue chan format.Flatevent, name string, oldSize int64, size int64) {
 	// maybe also flag what source this comes from?
 
 	// parse the json into a flatevent struct and push it into the queue
+	// Create a signal channel for flow control
+	signal := make(chan bool, 1)
+	go func() {
+		for {
+			if len(queue) < cap(queue)/2 {
+				select {
+				case signal <- true:
+				default:
+				}
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}()
+
 	if config.Type == "nsgflowlog" {
-		nsgflowlog(queue, downloadedData.Bytes(), name)
+		nsgflowlog(queue, signal, downloadedData.Bytes(), name)
 	}
 	if config.Type == "vnetflowlog" {
-		vnetflowlog(queue, downloadedData.Bytes(), name)
+		vnetflowlog(queue, signal, downloadedData.Bytes(), name)
 	}
 }
 
@@ -331,44 +345,3 @@ func writeTimestamp(path string, t time.Time) error {
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(ts)
 }
-
-/*
-// not needed because partial read can read from 0 also??
-func fullRead(queue chan format.Flatevent, name string) {
-	config := common.ConfigHandler()
-	cred, err := azblob.NewSharedKeyCredential(config.Accountname, config.Accountkey)
-	common.Error(err)
-	location := "https://" + config.Accountname + "." + config.Cloud
-	client, err := azblob.NewClientWithSharedKeyCredential(location, cred, nil)
-	common.Error(err)
-
-	ctx := context.Background()
-		// ListBlockBlob
-		blobURL := fmt.Sprintf("https://%s.%s/%s/%s", config.Accountname, config.Cloud, config.ContainerName, name)
-		blockBlobClient, err := blockblob.NewClientWithSharedKeyCredential(blobURL, cred, nil)
-		common.Error(err)
-
-		blockList, err := blockBlobClient.GetBlockList(context.Background(), blockblob.BlockListTypeAll, nil)
-		// BlockListTypeCommitted
-		common.Error(err)
-
-			for _, blocks := range blockList.BlockList.CommittedBlocks {
-				fmt.Println(*blocks.Name, *blocks.Size)
-				// QTAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw
-				// WjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw
-			}
-
-	get, err := client.DownloadStream(ctx, config.ContainerName, name, nil)
-	common.Error(err)
-
-	downloadedData := bytes.Buffer{}
-	retryReader := get.NewRetryReader(ctx, &azblob.RetryReaderOptions{})
-	_, err = downloadedData.ReadFrom(retryReader)
-	common.Error(err)
-	//fmt.Println(downloadedData.String())
-
-	err = retryReader.Close()
-	common.Error(err)
-
-}
-*/
