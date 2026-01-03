@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"janmg.com/blob-to-queue/common"
@@ -26,6 +27,47 @@ type FileMetadata struct {
 	ContentLength int64     `json:"content_length"`
 	ContentRead   int64     `json:"content_read"`
 	LastModified  time.Time `json:"last_modified"`
+}
+
+// https://learn.microsoft.com/en-us/azure/storage/blobs/storage-blob-go-get-started
+func getServiceClientTokenCredential(accountURL string) *azblob.Client {
+	// Create a new service client with token credential
+	credential, err := azidentity.NewDefaultAzureCredential(nil)
+	common.Error(err)
+
+	client, err := azblob.NewClient(accountURL, credential, nil)
+	common.Error(err)
+	return client
+}
+
+func getServiceClientSAS(accountURL string, sasToken string) *azblob.Client {
+	// Create a new service client with an existing SAS token
+
+	// Append the SAS to the account URL with a "?" delimiter
+	accountURLWithSAS := fmt.Sprintf("%s?%s", accountURL, sasToken)
+
+	client, err := azblob.NewClientWithNoCredential(accountURLWithSAS, nil)
+	common.Error(err)
+	return client
+}
+
+func getServiceClientSharedKey(accountName string, accountKey string) *azblob.Client {
+	// Create a new service client with shared key credential
+	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
+	common.Error(err)
+
+	accountURL := fmt.Sprintf("https://%s.blob.core.windows.net", accountName)
+
+	client, err := azblob.NewClientWithSharedKeyCredential(accountURL, credential, nil)
+	common.Error(err)
+	return client
+}
+
+func getServiceClientConnectionString(connectionString string) *azblob.Client {
+	// Create a new service client with connection string
+	client, err := azblob.NewClientFromConnectionString(connectionString, nil)
+	common.Error(err)
+	return client
 }
 
 func Blobworker(queue chan format.Flatevent) {
@@ -90,7 +132,7 @@ func doLoop(config common.Config, queue chan format.Flatevent, registry map[stri
 		}
 	}
 
-	location := "https://" + config.Accountname + "." + config.Cloud
+	//location := "https://" + config.Accountname + "." + config.Cloud
 	// fmt.Println(location)
 
 	// list all the nsg's
@@ -102,7 +144,7 @@ func doLoop(config common.Config, queue chan format.Flatevent, registry map[stri
 
 	// 1. Lists all the files in the remote storage account that match the path prefix
 	var filelist map[string]FileMetadata = make(map[string]FileMetadata)
-	filelist = listFiles(config.Resumepolicy, config.Accountname, config.Accountkey, location, last)
+	filelist = listFiles(config.Resumepolicy, config.Connection, last)
 	//fmt.Printf("Received filelist with %d entries\n", len(filelist))
 	var fullfiles = 0
 	var partialfiles = 0
@@ -149,14 +191,11 @@ func doLoop(config common.Config, queue chan format.Flatevent, registry map[stri
 	// 7. If stop signal comes, finish the current file, save the registry and quit
 }
 
-func listFiles(resumepolicy string, account string, key string, location string, last Stamp) map[string]FileMetadata {
+// func listFiles(resumepolicy string, account string, key string, location string, last Stamp) map[string]FileMetadata {
+func listFiles(resumepolicy string, connection string, last Stamp) map[string]FileMetadata {
 	config := common.ConfigHandler()
 	var filelist map[string]FileMetadata = make(map[string]FileMetadata)
-
-	cred, err := azblob.NewSharedKeyCredential(config.Accountname, config.Accountkey)
-	common.Error(err)
-	client, err := azblob.NewClientWithSharedKeyCredential(location, cred, nil)
-	common.Error(err)
+	client := getServiceClientConnectionString(config.Connection)
 
 	pager := client.NewListBlobsFlatPager(config.ContainerName, &azblob.ListBlobsFlatOptions{
 		Include: azblob.ListBlobsInclude{Snapshots: false, Versions: true},
@@ -207,17 +246,18 @@ func listFiles(resumepolicy string, account string, key string, location string,
 func read(queue chan format.Flatevent, name string, oldSize int64, size int64) {
 
 	config := common.ConfigHandler()
-	cred, err := azblob.NewSharedKeyCredential(config.Accountname, config.Accountkey)
-	common.Error(err)
-
-	location := "https://" + config.Accountname + "." + config.Cloud
-	client, err := azblob.NewClientWithSharedKeyCredential(location, cred, nil)
-	common.Error(err)
+	client := getServiceClientConnectionString(config.Connection)
+	// TODO: replace with getServiceClientSharedKey
+	//cred, err := azblob.NewSharedKeyCredential(config.Accountname, config.Accountkey)
+	//common.Error(err)
+	// location := "https://" + config.Accountname + "." + config.Cloud
+	//client, err := azblob.NewClientWithSharedKeyCredential(location, cred, nil)
+	//common.Error(err)
 
 	ctx := context.Background()
 
 	var get azblob.DownloadStreamResponse
-	var err2 error
+	var err error
 
 	if oldSize > 0 {
 		// Partial read - read only the new data
@@ -234,12 +274,12 @@ func read(queue chan format.Flatevent, name string, oldSize int64, size int64) {
 				},
 			},
 		}
-		get, err2 = client.DownloadStream(ctx, config.ContainerName, name, dso)
+		get, err = client.DownloadStream(ctx, config.ContainerName, name, dso)
 	} else {
 		// Full read - read entire file
-		get, err2 = client.DownloadStream(ctx, config.ContainerName, name, nil)
+		get, err = client.DownloadStream(ctx, config.ContainerName, name, nil)
 	}
-	common.Error(err2)
+	common.Error(err)
 
 	downloadedData := bytes.Buffer{}
 	retryReader := get.NewRetryReader(ctx, &azblob.RetryReaderOptions{})

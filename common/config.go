@@ -2,19 +2,21 @@ package common
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
 )
 
 type Output struct {
-	Format        string `mapstructure:"format"`
-	Filename      string `mapstructure:"filename"`
-	Connectionstring string `mapstructure:"connection"`
+	Format            string `mapstructure:"format"`
+	Filename          string `mapstructure:"filename"`
+	Connectionstring  string `mapstructure:"connection"`
 	Connectiondetails string `mapstructure:"connectiondetails"`
 }
 
 type Config struct {
+	Connection    string   `mapstructure:"connection"`
 	Accountname   string   `mapstructure:"accountName"`
 	Accountkey    string   `mapstructure:"accountkey"`
 	SasToken      string   `mapstructure:"sastoken"`
@@ -33,8 +35,8 @@ type Config struct {
 	Qsize         int      `mapstructure:"qsize"`
 	Qwatermark    int      `mapstructure:"qwaterwark"`
 	Output        []string `mapstructure:"output"`
-	Filename      boolean  `mapstructure:"addfilename"`
-    Environment   string   `mapstructure:"environment"`
+	Filename      bool     `mapstructure:"addfilename"`
+	Environment   string   `mapstructure:"environment"`
 	Stdout        Output   `mapstructure:"out"`
 }
 
@@ -54,6 +56,7 @@ func ConfigHandler() Config {
 	// https://github.com/spf13/viper#watching-and-re-reading-config-files
 	var conf = viper.New()
 
+	// TODO: create logic to build AccountName and AccountKey into a Connectionstring, also for SAS token
 	conf.SetDefault("cloud", "blob.core.windows.net")
 
 	conf.SetDefault("resumepolicy", "timestamp")
@@ -78,11 +81,29 @@ func ConfigHandler() Config {
 		path_exclude ** /*y=2022/**
 	*/
 
+	// Read primary config file
 	conf.SetConfigFile("blob-to-queue.yaml")
 	conf.SetConfigType("yaml")
 	conf.AddConfigPath(".")
 	err := conf.ReadInConfig()
-	Error(err)
+	if err != nil {
+		os.Exit(2)
+	}
+
+	// If a private config exists, load it and merge so private values override
+	priv := viper.New()
+	priv.SetConfigFile("blob-to-queue-private.yaml")
+	priv.SetConfigType("yaml")
+	priv.AddConfigPath(".")
+	if err := priv.ReadInConfig(); err == nil {
+		// Merge private settings into main config (private overrides)
+		conf.MergeConfigMap(priv.AllSettings())
+	} else {
+		// If the private file is not present, that's fine — continue with primary config
+		if _, statErr := os.Stat("blob-to-queue-private.yaml"); statErr == nil {
+			fmt.Printf("private file exists but failed to read — report error: %v\n", err)
+		}
+	}
 
 	var config Config
 	conf.Unmarshal(&config)
@@ -102,6 +123,7 @@ func ConfigHandler() Config {
 }
 
 func configPrint(conf Config) {
+	fmt.Println(conf.Connection)
 	fmt.Println(conf.Accountname)
 	fmt.Println(conf.Accountkey)
 	fmt.Println(conf.ContainerName)

@@ -73,6 +73,10 @@ func main() {
 			fmt.Println("Launching Elasticsearch worker goroutine...")
 			go output.ElasticsearchWorker(queue)
 			workersStarted++
+		case "logstash":
+			fmt.Println("Launching Logstash worker goroutine...")
+			go output.LogstashWorker(queue)
+			workersStarted++
 		case "kafka":
 			// go output.KafkaWorker(queue)
 		case "eventhub":

@@ -37,11 +37,11 @@ func initElasticsearch() error {
 		cert = nil
 	}
 
-	// TODO: Make configurable via config
+	// TODO: Make configurable via config.elasticsearch.connection / config.elasticsearch.token
 	cfg := elasticsearch.Config{
 		Addresses: []string{"https://10.0.0.230:9200"},
-		APIKey:    "NExt==",
-		CACert:    cert,
+		APIKey:    "amFubWcK",
+		CACert:    cert, // failed to verify certificate: x509: certificate signed by unknown authority (possibly because of "crypto/rsa: verification error" while trying to verify candidate authority certificate "Elasticsearch security auto-configuration HTTP CA")
 		Transport: &http.Transport{
 			MaxIdleConnsPerHost:   10,
 			ResponseHeaderTimeout: 30 * time.Second,
@@ -106,7 +106,7 @@ func ElasticsearchWorker(queue <-chan format.Flatevent) {
 	eventCount := 0
 	for event := range queue {
 		eventCount++
-		if eventCount%100 == 1 {
+		if eventCount%1000 == 0 {
 			log.Printf("Elasticsearch worker received event #%d from queue", eventCount)
 		}
 

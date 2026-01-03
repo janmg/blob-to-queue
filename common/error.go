@@ -6,8 +6,9 @@ import (
 )
 
 /*
-Should logging be implemnented as zerolog?
+Should logging be implemented as zerolog or slog?
 https://betterstack.com/community/guides/logging/zerolog/
+slog "github.com/sagikazarmark/slog-shim"
 */
 func Error(err error) {
 	// Errors should log a message and stop the process

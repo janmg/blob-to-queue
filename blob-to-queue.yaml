@@ -13,13 +13,13 @@ DebugTime: false
 ## INPUT CONFIG
 # read from blob storage, default format is "json",
 # TODO implement jsonlines, csv, line, regexp parser when everything else works. This program is initially for nsgflowlog parsing.
-accountName: "janmg"
-accountKey: "AMWvXjw=="
-# TODO alternative sas_token
-containerName: "insights-logs-networksecuritygroupflowevent"
-cloud: "blob.core.windows.net"
-type: "vnetflowlog" // nsgflowlog
-format: "json" // "json_lines","lines","raw"
+#accountName: "janmg"
+#accountKey: "amFubWcK"
+#cloud: "blob.core.windows.net"
+connection: "DefaultEndpointsProtocol=https;AccountName=janmgblobtoqueue;AccountKey=amFubWcK;EndpointSuffix=core.windows.net"
+containerName: "insights-logs-flowlogflowevent"
+type: "vnetflowlog" # nsgflowlog
+format: "json" # "json_lines","lines","raw"
 interval: 60
 
 startpolicy: "start_fresh"
@@ -33,10 +33,10 @@ registry: "registry.dat"
 
 
 ## FILTER CONFIG
-path_prefix: "/SUBSCRIPTIONS/F5DD6E2D-1F42-4F54-B3BD-DBF595138C59/RESOURCEGROUPS/VM/PROVIDERS/MICROSOFT.NETWORK/OCTOBER-NSG"
-#"resourceId=/SUBSCRIPTIONS/F5DD6E2D-1F42-4F54-B3BD-DBF595138C59/RESOURCEGROUPS/VM/PROVIDERS/MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/OCTOBER-NSG/y=2023/m=10/d=31/h=18/m=00"path_prefix", "['**/*']")  // array of prefixes a path must start with, "resourceId=/SUBSCRIPTIONS/F5DD6E2D-1F42-4F54-B3BD-DBF595138C59/RESOURCEGROUPS/VM/PROVIDERS/MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/OCTOBER-NSG/"
+path_prefix: "/SUBSCRIPTIONS/093F2264-2117-475A-8FF0-AE720ACFB36B_NETWORKWATCHERRG/NETWORKWATCHER_SWEDENCENTRAL_VNET-SWEDENCENTRAL-VM-FLOWLOG"
+# /y=2025/m=12/d=25/h=06/m=00/macAddress=7CED8D3F0C44/PT1H.json
 path_include: ['PT1H.json']
-path_filter: ["*.json"]
+path_filter: ["**/*.json"]
 
 # Input type and file filters
 # logtype, :validate => ['nsgflowlog','vnetflowlog','wadiis','appservice','raw'], :default => 'raw'
@@ -46,8 +46,8 @@ path_filter: ["*.json"]
 
 # Because golang does not support "infinite" channels, we set a maximum size for the queue. The watermark is the size until we stop reading in more data, the difference between qsize and qwatermark should be the amount of events that can be stored in a single file.
 qsize: 20000
-qwatermark: 95
-
+qwatermark: 18000
+# TODO: switch to percentage
 
 ## OUTPUT CONFIG
 # The formatter can output as original "line", as "csv"
@@ -68,18 +68,20 @@ stdout:
 file:
   filename: "./nsg.log"
   format: "csv"
+#TODO: Should there be an RFC 5424 rsyslog over network option?
 
 #summary to file
 summary:
   filename: "./nsg-summary.log"
   udp_timeout: 120
+  #?? what does UDP have to do with files? Should this be an interval in which stats are written to the summary file?
 
 # output to azure eventhub
 eventhub:
   #Event Hubs Namespace / Shared access policies: RootManageSharedAccessKey
   # not in the entities, and create a new "send" policy
   connection: "Endpoint=sb://nsgflowlogs.servicebus.windows.net/;SharedAccessKeyName=nsgflowlogs;SharedAccessKey=yq6a9A="
-  #connectionString: "Endpoint=sb://nsgflowlogs.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=pVYkhJMJzJw="
+  #connection: "Endpoint=sb://nsgflowlogs.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=pVYkhJMJzJw="
   format: "csv"
 
 # output to kafka
