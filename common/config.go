@@ -15,6 +15,15 @@ type Output struct {
 	Connectiondetails string `mapstructure:"connectiondetails"`
 }
 
+// OutputConfig is a unified configuration structure for outputs
+type OutputConfig struct {
+	Connection string   `mapstructure:"connection"`
+	Token      string   `mapstructure:"token"`
+	Format     string   `mapstructure:"format"`
+	Details    []string `mapstructure:"details"`
+	Filename   string   `mapstructure:"filename"`
+}
+
 type Config struct {
 	Connection    string   `mapstructure:"connection"`
 	Accountname   string   `mapstructure:"accountName"`
@@ -34,23 +43,20 @@ type Config struct {
 	PathFilter    []string `mapstructure:"path_filter"`
 	Qsize         int      `mapstructure:"qsize"`
 	Qwatermark    int      `mapstructure:"qwaterwark"`
-	Output        []string `mapstructure:"output"`
 	Filename      bool     `mapstructure:"addfilename"`
 	Environment   string   `mapstructure:"environment"`
-	Stdout        Output   `mapstructure:"out"`
+	Output        []string `mapstructure:"output"`
+	// Per-output structured configs
+	Stdout        OutputConfig `mapstructure:"stdout"`
+	File          OutputConfig `mapstructure:"file"`
+	Summary       OutputConfig `mapstructure:"summary"`
+	Eventhub      OutputConfig `mapstructure:"eventhub"`
+	Kafka         OutputConfig `mapstructure:"kafka"`
+	Ampq          OutputConfig `mapstructure:"ampq"`
+	Mqtt          OutputConfig `mapstructure:"mqtt"`
+	Logstash      OutputConfig `mapstructure:"logstash"`
+	Elasticsearch OutputConfig `mapstructure:"elasticsearch"`
 }
-
-/*
-type output struct {
-	exhaust string
-	connect string
-	format  string
-}
-*/
-
-//type IBlob interface {
-//	configPrint()
-//}
 
 func ConfigHandler() Config {
 	// https://github.com/spf13/viper#watching-and-re-reading-config-files

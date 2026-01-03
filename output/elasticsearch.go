@@ -31,16 +31,26 @@ func initElasticsearch() error {
 		return nil
 	}
 
-	cert, err := os.ReadFile("elastic_ca.crt")
-	if err != nil {
-		log.Printf("Warning: Could not read elastic_ca.crt: %v", err)
-		cert = nil
+	// Prefer CA file configured in blob-to-queue.yaml -> elasticsearch.details[0]
+	config := common.ConfigHandler()
+	var cert []byte
+	if len(config.Elasticsearch.Details) > 0 && config.Elasticsearch.Details[0] != "" {
+		caFile := config.Elasticsearch.Details[0]
+		c, err := os.ReadFile(caFile)
+		if err != nil {
+			log.Printf("Warning: Could not read CA file %s: %v; falling back to elastic_ca.crt", caFile, err)
+			cert, _ = os.ReadFile("elastic_ca.crt")
+		} else {
+			cert = c
+		}
+	} else {
+		cert, _ = os.ReadFile("elastic_ca.crt")
 	}
 
 	// TODO: Make configurable via config.elasticsearch.connection / config.elasticsearch.token
 	cfg := elasticsearch.Config{
-		Addresses: []string{"https://10.0.0.230:9200"},
-		APIKey:    "amFubWcK",
+		Addresses: []string{config.Elasticsearch.Connection},
+		APIKey:    config.Elasticsearch.Token,
 		CACert:    cert, // failed to verify certificate: x509: certificate signed by unknown authority (possibly because of "crypto/rsa: verification error" while trying to verify candidate authority certificate "Elasticsearch security auto-configuration HTTP CA")
 		Transport: &http.Transport{
 			MaxIdleConnsPerHost:   10,
@@ -52,6 +62,7 @@ func initElasticsearch() error {
 		},
 	}
 
+	var err error
 	esClient, err = elasticsearch.NewClient(cfg)
 	common.Warning(err)
 	// error creating Elasticsearch client
@@ -70,7 +81,7 @@ func initElasticsearch() error {
 		Index:         "nsgflowlog",
 		Client:        esClient,
 		NumWorkers:    4,                // Number of concurrent workers
-		FlushBytes:    5e+6,             // Flush threshold in bytes (5MB)
+		FlushBytes:    1e+7,             // Flush threshold in bytes (10MB)
 		FlushInterval: 10 * time.Second, // Flush interval
 		OnError: func(ctx context.Context, err error) {
 			log.Printf("Bulk indexer error: %v", err)
@@ -98,7 +109,7 @@ func initElasticsearch() error {
 func ElasticsearchWorker(queue <-chan format.Flatevent) {
 	// Print immediately to prove goroutine started
 	log.Println("Elasticsearch worker initializing...")
-
+	// Ensure Elasticsearch client & bulk indexer are initialized
 	if err := initElasticsearch(); err != nil {
 		log.Fatalf("Failed to initialize Elasticsearch: %v", err)
 	}

@@ -56,7 +56,8 @@ func getServiceClientSharedKey(accountName string, accountKey string) *azblob.Cl
 	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
 	common.Error(err)
 
-	accountURL := fmt.Sprintf("https://%s.blob.core.windows.net", accountName)
+	//TODO: use cloud string from config.cloud
+	accountURL := fmt.Sprintf("https://%s.%s", accountName, "blob.core.windows.net")
 
 	client, err := azblob.NewClientWithSharedKeyCredential(accountURL, credential, nil)
 	common.Error(err)
@@ -179,7 +180,7 @@ func doLoop(config common.Config, queue chan format.Flatevent, registry map[stri
 
 	// 5. Save the registry with files and sizes to a file
 	if config.Resumepolicy == "timestamp" {
-		writeTimestamp("timestamp", time.Now())
+		writeTimestamp(config.Timestamp, time.Now())
 	}
 	if config.Resumepolicy == "registry" {
 		saveRegistry(config.Registry, filelist)

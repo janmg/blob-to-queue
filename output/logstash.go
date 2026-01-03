@@ -17,7 +17,7 @@ func LogstashWorker(queue <-chan format.Flatevent) {
 	log.Println("Logstash worker initializing...")
 	config := common.ConfigHandler()
 
-	addr := config.Stdout.Connectionstring
+	addr := config.Logstash.Connection
 	if addr == "" {
 		addr = "localhost:5000"
 	}

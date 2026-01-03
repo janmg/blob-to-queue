@@ -22,7 +22,7 @@ type: "vnetflowlog" # nsgflowlog
 format: "json" # "json_lines","lines","raw"
 interval: 60
 
-startpolicy: "start_fresh"
+startpolicy: "resume"
 # "resume"/ "start_over" / "start_fresh"
 resumepolicy: "timestamp"
 # "timestamp" / "registry"
@@ -102,8 +102,9 @@ mqtt:
 
 # output to elasticsearch
 elasticsearch:
-  connection: "https://10.0.0.247:9200"
+  connection: "https://10.0.0.230:9200"
+  token: "AAEAAWVsYXRmEtblE"
   format: "ecs"
-  connectiondetails: ["AAEAAWVsYXRmEtblE", "vnet-", "1w"]
+  details: ["elastic_ca.crt","vnet-", "1w"]
   # serviceToken, index, interval
  
