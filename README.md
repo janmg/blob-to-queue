@@ -15,13 +15,18 @@ containerName: "insights-logs-networksecuritygroupflowevent"
 ```
 
 # configure output
-The configuration file uses an array for output to activate the output formats. For instance to write to elasticsearch and to file, set output like so
+The configuration file uses an array for output to activate the output formats and then configure the outputs. For instance set "output" to write to elasticsearch and to file and then configure the destination and format you like to 
 ```
 output: ["elasticsearch","file"]
+file:
+  filename: "./nsg.log"
+  format: "csv"
+elasticsearch:
+  addresses: "https://elastic-1:9200"
+  serviceToken: "AAEAAWVsYXRmEtblE"
+  format: "ecs"
+  index: "nsg-"
 ```
-Other output possibilities are eventhub, kafka, ampq, mqtt, appendfiles, stdout, logstash. AMPQ, Fluentd, Fluxdb, Keyval, Redis, MQTT or ZeroMQ.
-As a bonus for vnetflowlogs, create statistics by grouping the packets and calculating stats about packets and bytes in and out.
-
 # Microsoft blobstorage
 pt1h.json logfiles are written to blobstorage every hour. They have a header in the first block and a footer in the last block and the content grows every minute with another json fragment. These fragments contain all the events for that minute. The blob-to-queue application can read the increments every minute and process them
 ```
@@ -60,3 +65,4 @@ My problem with JAVA is the Oracle licensing requirements per JVM for large ente
 
 # kafka
 nsgflowlogs are events, it would make more sense to me to have them natively available in an eventhub. An eventhub is an AMPQ / Kafka compatible queueing broker. This program will read from the files that are written every minute and add them as a batch to an output stream. I focus first on writing it to an eventhub, because it is available in Azure. Other output formats are planned are native kafka and amqp and maybe mqtt or any. Eventhubs without traffic already cost me 16 euros per months, so having a cost effective alternative is important for a single individual.
+
