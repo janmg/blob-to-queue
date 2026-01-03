@@ -7,12 +7,22 @@ import (
 	"github.com/spf13/viper"
 )
 
-// TODO: Export all configs not just blob account
+type Output struct {
+	Format        string `mapstructure:"format"`
+	Filename      string `mapstructure:"filename"`
+	Connectionstring string `mapstructure:"connection"`
+	Connectiondetails string `mapstructure:"connectiondetails"`
+}
+
 type Config struct {
 	Accountname   string   `mapstructure:"accountName"`
 	Accountkey    string   `mapstructure:"accountkey"`
+	SasToken      string   `mapstructure:"sastoken"`
 	ContainerName string   `mapstructure:"containerName"`
 	Cloud         string   `mapstructure:"cloud"`
+	Type          string   `mapstructure:"type"`
+	Format        string   `mapstructure:"format"`
+	Interval      int      `mapstructure:"interval"`
 	Startpolicy   string   `mapstructure:"startpolicy"`
 	Resumepolicy  string   `mapstructure:"resumepolicy"`
 	Timestamp     string   `mapstructure:"timestamp"`
@@ -20,12 +30,12 @@ type Config struct {
 	PathPrefix    []string `mapstructure:"path_prefix"`
 	PathInclude   []string `mapstructure:"path_include"`
 	PathFilter    []string `mapstructure:"path_filter"`
-	Interval      int      `mapstructure:"interval"`
 	Qsize         int      `mapstructure:"qsize"`
 	Qwatermark    int      `mapstructure:"qwaterwark"`
-	Format        string   `mapstructure:"format"`
-	Type          string   `mapstructure:"type"`
 	Output        []string `mapstructure:"output"`
+	Filename      boolean  `mapstructure:"addfilename"`
+    Environment   string   `mapstructure:"environment"`
+	Stdout        Output   `mapstructure:"out"`
 }
 
 /*
@@ -82,6 +92,7 @@ func ConfigHandler() Config {
 		conf.OnConfigChange(func(e fsnotify.Event) {
 			fmt.Println("Config file changed:", e.Name)
 			conf.Unmarshal(&config)
+			// TODO: reinitialize the changed config
 			//lookup = append(lookup, output{"stdout", "", "Flat"})
 			//lookup = append(lookup, output{"summary", "", "Flat"})
 			//lookup = append(lookup, output{"azurehub", viper.GetString("eventhub.connectionString"), viper.GetString("eventhub.format")})
