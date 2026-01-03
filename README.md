@@ -1,37 +1,45 @@
-# blob-to-queue
-Golang application for reading from an azure blob storage, listing the files that match a path filter and pushing the result to an event queue like kafka stream. Intended to offer an alternative to my own logstash module logstash-input-azure_blob_storage and move it's logic to a standalone program.
+# Azure VNET Flow Logs
+In Azure, it's possible to log network flowlogs to a blobstorage, which gives you an hourly file pt1h.json file that grows every minute. This application can list the files from the blobstorage, read them and process them as individual events and feed them to a queue for further processing. Then an interval later, if the file has grown it can read the delta and process new events. Events can be written to Elasticsearch, Kafka or Eventhub or any other protocol. I have made the output processor for AMPQ, Fluentd, Fluxdb, Keyval, Redis, MQTT or ZeroMQ.
+
+# Logstash_azure_blob_storage
+This Golang application does not need logstash. I wrote and maintained the logstash plugin logstash_azure_blob_storage in Ruby, as a fix to the original logstash plugin logstash-input-azureblob. But due to Faraday or Nogiri dependancy conflicts also my logstash_azure_blob_storage only works on some of the later logstash versions. This standalone application does not have to consider those dependancies.
 
 # configure
-The configurationfile is a YAML file, which is reloadable on save, because its using spf13/viper. The configuration format allows for multiple output streams.
-configure multiple outputs
-
-blob-to-queue.yaml
-
-output: ["stdout","file"]
+The blob-to-queue.yaml configurationfile is a YAML file, uses spf13/viper, which makes it reloadable on save. The configuration format allows for multiple output streams.
 
 # configure input
+```
 accountName: "blobstoragename"
 accountKey: "AMWsmPcgy/1234567890123445abcdefghijkl/1234567890123445abcdefghijklABCDEFGHI+ASt3SvXjw=="
 containerName: "insights-logs-networksecuritygroupflowevent"
+```
+
+# configure output
+The configuration file uses an array for output to activate the output formats. For instance to write to elasticsearch and to file, set output like so
+```
+output: ["elasticsearch","file"]
+```
+Other output possibilities are eventhub, kafka, ampq, mqtt, appendfiles, stdout, logstash. AMPQ, Fluentd, Fluxdb, Keyval, Redis, MQTT or ZeroMQ.
+As a bonus for vnetflowlogs, create statistics by grouping the packets and calculating stats about packets and bytes in and out.
 
 # Microsoft blobstorage
-Logfiles written to blobstorage in the json format have a header in the first block and a footer in the last block
+pt1h.json logfiles are written to blobstorage every hour. They have a header in the first block and a footer in the last block and the content grows every minute with another json fragment. These fragments contain all the events for that minute. The blob-to-queue application can read the increments every minute and process them
+```
 Block 0000: QTAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw {message: [
-Block 0001: Bobaba                                          {"timestamp": 98765432, "mac":"00:01:02:AA:AB:AC"},
-Block 0002: Bobae                                           {"timestamp": 98765433, "mac":"00:01:02:AA:AB:AD"}
+Block 0001: Bobaba                                          {"timestamp": 98765432, "mac":"00:01:02:AA:AB:AC"}
+Block 0002: Bobabb                                          ,{"timestamp": 98765433, "mac":"00:01:02:AA:AB:AD"}
 Block FFFF: WjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw ]}
+```
 
 # resumepolicy
-In case blob-to-queue is stopped, it can continue processing from the file that was last processed. flowlogs have the timestamp in the directory and they can be read in sequence. The registry will then contain the directory that was last processed, because the time stamp is included in the filepath. "y=2023/m=10/d=31/h=14/m=00". The file may have grown with a blob since the last time the file was processed. Because the registry also contains the amount of bytes read since the last time, blob-to-queue will read the new parts.
+Can be set to	timestamp or registry. In case blob-to-queue is stopped, it can continue processing from the file that was last processed. For vnetflowlogs and nsgflowlogs, the resuming can be done based on the last processed timestamp. The registry will contain the directory that was last processed, because the timestamp is included in the filepath. "y=2023/m=10/d=31/h=14/m=00". The file may have grown with a blob since the last time the file was processed.
+
+To make this application suitable for any other format it can be configured to scan all the files in the storage account or scan part of the storage account based on a file filter. Then a registry file can be kept to remember how many bytes of which files have been processed. The registry will then contain a list of files and the amount of bytes read since the last time, blob-to-queue can then start reading only the new fragments.
 
 # flatevents
 The original nsgflowlogs and vnetflowlogs are nested json structures, the logic will flatten each log entry as a standalone json event which can be filtered and converted into several formats and sent to several outputs
 
-In the output, it is possible to specify ECS as a format, this is an elasticsearch format that tries to unify the JSON
-
-# configure output
-eventhub, kafka, ampq, mqtt, appendfiles, stdout, logstash
-and as a bonus for nsgflowlogs, create statistics by grouping the packets and calculating stats about packets and bytes in and out.
+In the output, it is possible to specify ECS as a format, this is an elasticsearch format that tries to unify the JSON fields for correlating the events.
 
 # Running
 go run blob-to-queue.go
@@ -53,13 +61,6 @@ nsgflowlogs are events, it would make more sense to me to have them natively ava
 
 Other output queues are implemented as golang modules exist for ampq, mqtt, keyval, etcetera
 
-# What ChatGPT thinks of my code
-✅ Prevent Deadlocks: Use a buffered channel and select for non-blocking writes.
 
-✅ Faster JSON Parsing: Use json.Decoder for efficiency.
-
-✅ Parallel Processing: Implement worker Goroutines for concurrency.
-
-✅ Efficient Elasticsearch Writes: Use the Bulk API to reduce network calls.
 
 ✅ Better Logging & Error Handling: Implement structured logging with Zap or Logrus.
