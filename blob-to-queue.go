@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
-	"time"
 
 	"janmg.com/blob-to-queue/common"
 	"janmg.com/blob-to-queue/format"
@@ -41,18 +41,34 @@ func main() {
 
 	// Read flatevents from the blobstorage and add them to the queue
 	queue := make(chan format.Flatevent, config.Qsize)
-	defer close(queue)
+
+	// WaitGroup for output workers so we can wait for them to finish
+	var outputsWg sync.WaitGroup
 
 	go func() {
 		sig := <-sigs
 		fmt.Println(sig)
-		//fetchmore = false
-		fmt.Println("stopping after processing the last events, now in the queue: ", len(queue))
-		for len(queue) > 0 {
-			time.Sleep(10 * time.Second)
-			fmt.Println("still in the queue: ", len(queue))
+		fmt.Println("shutdown requested — signalling input to stop")
+
+		// Signal the input worker to stop producing more events
+		input.RequestStop()
+
+		// Wait for the input worker to exit cleanly
+		input.WaitStopped()
+
+		fmt.Println("input stopped; closing queue to let outputs finish")
+		close(queue)
+
+		// Wait for all output workers to finish processing
+		outputsWg.Wait()
+
+		// Ensure final registry/timestamp is persisted
+		if err := input.SaveState(); err != nil {
+			fmt.Println("Warning: failed to save state:", err)
 		}
-		os.Exit(99)
+
+		fmt.Println("shutdown complete — exiting")
+		os.Exit(0)
 	}()
 
 	// Read flatevents from the blobstorage and add them to the queue
@@ -71,11 +87,19 @@ func main() {
 		switch out {
 		case "elasticsearch":
 			fmt.Println("Launching Elasticsearch worker goroutine...")
-			go output.ElasticsearchWorker(queue)
+			outputsWg.Add(1)
+			go func() {
+				defer outputsWg.Done()
+				output.ElasticsearchWorker(queue)
+			}()
 			workersStarted++
 		case "logstash":
 			fmt.Println("Launching Logstash worker goroutine...")
-			go output.LogstashWorker(queue)
+			outputsWg.Add(1)
+			go func() {
+				defer outputsWg.Done()
+				output.LogstashWorker(queue)
+			}()
 			workersStarted++
 		case "kafka":
 			// go output.KafkaWorker(queue)

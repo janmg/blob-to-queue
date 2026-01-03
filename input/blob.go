@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
@@ -74,8 +75,12 @@ func getServiceClientConnectionString(connectionString string) *azblob.Client {
 func Blobworker(queue chan format.Flatevent) {
 	config := common.ConfigHandler()
 
-	// The registry is the list of files already processed, the filelist is a list of currently seen files, than read the diffence and process the files
-	var registry map[string]FileMetadata = make(map[string]FileMetadata)
+	// Use package-level registry/last so other packages can request final save
+	registryMu.Lock()
+	if registry == nil {
+		registry = make(map[string]FileMetadata)
+	}
+	registryMu.Unlock()
 
 	// NSGFlowLogs grow in predictable directories and files, only need to keep a timestamp pointer to the last processed directory, other files may have arbitrary names and the registry will track which files are new and which ones have grown.
 	// https://pkg.go.dev/time
@@ -98,14 +103,22 @@ func Blobworker(queue chan format.Flatevent) {
 		if config.Startpolicy == "start_over" {
 			fmt.Println("Starting over, clearing the registry")
 			os.Remove(config.Registry) // Delete the registry file
+			registryMu.Lock()
 			registry = make(map[string]FileMetadata)
+			registryMu.Unlock()
 		} else {
 			var err error
 			fmt.Println("Resuming from the registry")
-			registry, err = loadRegistry("registry.json")
+			r, err := loadRegistry("registry.json")
 			if err != nil {
+				registryMu.Lock()
 				registry = make(map[string]FileMetadata)
+				registryMu.Unlock()
 				fmt.Println("Can't read registry for start_fresh, will start_over instead")
+			} else {
+				registryMu.Lock()
+				registry = r
+				registryMu.Unlock()
 			}
 		}
 		fmt.Println("Resuming from registry")
@@ -118,7 +131,17 @@ func Blobworker(queue chan format.Flatevent) {
 	interval := time.NewTicker(time.Duration(config.Interval) * time.Second)
 	defer interval.Stop()
 
+	// create stopped channel to signal exit
+	stoppedCh = make(chan struct{})
+	defer func() {
+		close(stoppedCh)
+	}()
+
 	for range interval.C {
+		// stopRequested check — if requested, exit loop after current iteration
+		if stopRequested {
+			break
+		}
 		doLoop(config, queue, registry, last)
 	}
 }
@@ -179,6 +202,7 @@ func doLoop(config common.Config, queue chan format.Flatevent, registry map[stri
 	// TODO: This doesn't work well? ... need to consider timestamps, fullfiles is 0 and updated files are 7 ... ???
 
 	// 5. Save the registry with files and sizes to a file
+	// TODO: this should only be done when the shutdown is triggered
 	if config.Resumepolicy == "timestamp" {
 		writeTimestamp(config.Timestamp, time.Now())
 	}
@@ -361,7 +385,11 @@ func readTimestamp(path string) (Stamp, error) {
 	var ts Stamp
 
 	file, err := os.Open(path)
-	common.Error(err)
+	// If the file doesn't exist, return empty timestamp
+	if os.IsNotExist(err) {
+		return ts, nil
+	}
+	common.Warning(err)
 	defer file.Close()
 
 	decoder := json.NewDecoder(file)
@@ -385,4 +413,39 @@ func writeTimestamp(path string, t time.Time) error {
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(ts)
+}
+
+// Package-level state and control for graceful shutdown
+var (
+	registryMu    sync.Mutex
+	registry      map[string]FileMetadata
+	lastStamp     Stamp
+	stopRequested bool
+	stoppedCh     chan struct{}
+)
+
+// RequestStop signals the Blobworker to stop after its current iteration.
+func RequestStop() {
+	stopRequested = true
+}
+
+// WaitStopped blocks until the Blobworker has exited after a stop request.
+func WaitStopped() {
+	if stoppedCh == nil {
+		return
+	}
+	<-stoppedCh
+}
+
+// SaveState writes the current timestamp or registry to disk based on config
+func SaveState() error {
+	cfg := common.ConfigHandler()
+	if cfg.Resumepolicy == "timestamp" {
+		return writeTimestamp(cfg.Timestamp, time.Now())
+	}
+	// registry
+	registryMu.Lock()
+	defer registryMu.Unlock()
+	saveRegistry(cfg.Registry, registry)
+	return nil
 }
