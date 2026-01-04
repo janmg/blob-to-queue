@@ -1,0 +1,11 @@
+fsnotify: true
+connection: "DefaultEndpointsProtocol=https;AccountName=accountname;AccountKey=amFubWcK;EndpointSuffix=core.windows.net"
+startpolicy: "resume"
+resumepolicy: "timestamp"
+
+output: ["elasticsearch"]
+elasticsearch:
+  connection: "https://10.0.0.230:9200"
+  format: "ecs"
+  token: "AAEAAWVsYXRmEtblE"
+  details: ["elastic_ca.crt","vnet-", "1w"]
