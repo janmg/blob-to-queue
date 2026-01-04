@@ -115,43 +115,97 @@ func ElasticsearchWorker(queue <-chan format.Flatevent) {
 	}
 
 	eventCount := 0
-	for event := range queue {
-		eventCount++
-		if eventCount%1000 == 0 {
-			log.Printf("Elasticsearch worker received event #%d from queue", eventCount)
+	// Buffer up to 1000 events and flush as a batch. Also flush after a short timeout
+	const maxBatch = 1000
+	flushTimeout := 500 * time.Millisecond
+	batch := make([]format.Flatevent, 0, maxBatch)
+
+outer:
+	for {
+		// Block waiting for the first event of a batch
+		ev, ok := <-queue
+		if !ok {
+			// channel closed, flush any remaining and exit
+			break outer
+		}
+		batch = append(batch, ev)
+
+		// Try to collect up to maxBatch events; stop collecting on timeout or channel close
+	collectLoop:
+		for len(batch) < maxBatch {
+			select {
+			case ev, ok := <-queue:
+				if !ok {
+					// channel closed; proceed to flush remaining
+					break collectLoop
+				}
+				batch = append(batch, ev)
+			case <-time.After(flushTimeout):
+				// no more events within timeout, flush what we have
+				break collectLoop
+			}
 		}
 
-		// Convert event to JSON
-		data, err := json.Marshal(event)
-		if err != nil {
-			log.Printf("Error marshaling event: %v", err)
-			continue
+		// Send batch to bulk indexer
+		// Good moment to check if bulkindexer is still healthy
+		stats := esBulkIndexer.Stats()
+		log.Println(stats)
+		for _, event := range batch {
+			eventCount++
+			if eventCount%1000 == 0 {
+				log.Printf("Elasticsearch worker received event #%d from queue", eventCount)
+			}
+
+			data, err := json.Marshal(event)
+			if err != nil {
+				log.Printf("Error marshaling event: %v", err)
+				continue
+			}
+
+			if err := esBulkIndexer.Add(
+				context.Background(),
+				esutil.BulkIndexerItem{
+					Action: "index",
+					Body:   bytes.NewReader(data),
+					OnSuccess: func(ctx context.Context, item esutil.BulkIndexerItem, res esutil.BulkIndexerResponseItem) {
+						atomic.AddUint64(&indexedCount, 1)
+						count := atomic.LoadUint64(&indexedCount)
+						if count%100 == 0 {
+							log.Printf("Successfully indexed %d documents to Elasticsearch", count)
+						}
+					},
+					OnFailure: func(ctx context.Context, item esutil.BulkIndexerItem, res esutil.BulkIndexerResponseItem, err error) {
+						if err != nil {
+							log.Printf("Error indexing document: %v", err)
+						} else {
+							log.Printf("Error indexing document: %s: %s", res.Error.Type, res.Error.Reason)
+						}
+					},
+				},
+			); err != nil {
+				log.Printf("Error adding document to bulk indexer: %v", err)
+			}
 		}
 
-		// Add to bulk indexer
-		err = esBulkIndexer.Add(
-			context.Background(),
-			esutil.BulkIndexerItem{
-				Action: "index",
-				Body:   bytes.NewReader(data),
-				OnSuccess: func(ctx context.Context, item esutil.BulkIndexerItem, res esutil.BulkIndexerResponseItem) {
-					atomic.AddUint64(&indexedCount, 1)
-					count := atomic.LoadUint64(&indexedCount)
-					if count%100 == 0 {
-						log.Printf("Successfully indexed %d documents to Elasticsearch", count)
-					}
-				},
-				OnFailure: func(ctx context.Context, item esutil.BulkIndexerItem, res esutil.BulkIndexerResponseItem, err error) {
-					if err != nil {
-						log.Printf("Error indexing document: %v", err)
-					} else {
-						log.Printf("Error indexing document: %s: %s", res.Error.Type, res.Error.Reason)
-					}
-				},
-			},
-		)
-		if err != nil {
-			log.Printf("Error adding document to bulk indexer: %v", err)
+		// reset batch
+		batch = batch[:0]
+	}
+
+	// If channel closed but batch still has items, flush them
+	if len(batch) > 0 {
+		for _, event := range batch {
+			eventCount++
+			if eventCount%1000 == 0 {
+				log.Printf("Elasticsearch worker received event #%d from queue", eventCount)
+			}
+			data, err := json.Marshal(event)
+			if err != nil {
+				log.Printf("Error marshaling event: %v", err)
+				continue
+			}
+			if err := esBulkIndexer.Add(context.Background(), esutil.BulkIndexerItem{Action: "index", Body: bytes.NewReader(data)}); err != nil {
+				log.Printf("Error adding document to bulk indexer: %v", err)
+			}
 		}
 	}
 

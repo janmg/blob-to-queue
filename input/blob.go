@@ -6,10 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"sync"
 	"time"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"janmg.com/blob-to-queue/common"
@@ -30,57 +30,15 @@ type FileMetadata struct {
 	LastModified  time.Time `json:"last_modified"`
 }
 
-// https://learn.microsoft.com/en-us/azure/storage/blobs/storage-blob-go-get-started
-func getServiceClientTokenCredential(accountURL string) *azblob.Client {
-	// Create a new service client with token credential
-	credential, err := azidentity.NewDefaultAzureCredential(nil)
-	common.Error(err)
-
-	client, err := azblob.NewClient(accountURL, credential, nil)
-	common.Error(err)
-	return client
-}
-
-func getServiceClientSAS(accountURL string, sasToken string) *azblob.Client {
-	// Create a new service client with an existing SAS token
-
-	// Append the SAS to the account URL with a "?" delimiter
-	accountURLWithSAS := fmt.Sprintf("%s?%s", accountURL, sasToken)
-
-	client, err := azblob.NewClientWithNoCredential(accountURLWithSAS, nil)
-	common.Error(err)
-	return client
-}
-
-func getServiceClientSharedKey(accountName string, accountKey string) *azblob.Client {
-	// Create a new service client with shared key credential
-	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
-	common.Error(err)
-
-	//TODO: use cloud string from config.cloud
-	accountURL := fmt.Sprintf("https://%s.%s", accountName, "blob.core.windows.net")
-
-	client, err := azblob.NewClientWithSharedKeyCredential(accountURL, credential, nil)
-	common.Error(err)
-	return client
-}
-
-func getServiceClientConnectionString(connectionString string) *azblob.Client {
-	// Create a new service client with connection string
-	client, err := azblob.NewClientFromConnectionString(connectionString, nil)
-	common.Error(err)
-	return client
-}
-
 func Blobworker(queue chan format.Flatevent) {
 	config := common.ConfigHandler()
 
 	// Use package-level registry/last so other packages can request final save
-	registryMu.Lock()
+	mutex.Lock()
 	if registry == nil {
 		registry = make(map[string]FileMetadata)
 	}
-	registryMu.Unlock()
+	mutex.Unlock()
 
 	// NSGFlowLogs grow in predictable directories and files, only need to keep a timestamp pointer to the last processed directory, other files may have arbitrary names and the registry will track which files are new and which ones have grown.
 	// https://pkg.go.dev/time
@@ -103,22 +61,22 @@ func Blobworker(queue chan format.Flatevent) {
 		if config.Startpolicy == "start_over" {
 			fmt.Println("Starting over, clearing the registry")
 			os.Remove(config.Registry) // Delete the registry file
-			registryMu.Lock()
+			mutex.Lock()
 			registry = make(map[string]FileMetadata)
-			registryMu.Unlock()
+			mutex.Unlock()
 		} else {
 			var err error
 			fmt.Println("Resuming from the registry")
 			r, err := loadRegistry("registry.json")
 			if err != nil {
-				registryMu.Lock()
+				mutex.Lock()
 				registry = make(map[string]FileMetadata)
-				registryMu.Unlock()
+				mutex.Unlock()
 				fmt.Println("Can't read registry for start_fresh, will start_over instead")
 			} else {
-				registryMu.Lock()
+				mutex.Lock()
 				registry = r
-				registryMu.Unlock()
+				mutex.Unlock()
 			}
 		}
 		fmt.Println("Resuming from registry")
@@ -182,8 +140,16 @@ func doLoop(config common.Config, queue chan format.Flatevent, registry map[stri
 
 	// Read based on modified flags
 
+	// Iterate filelist in deterministic order (sorted by filename)
+	names := make([]string, 0, len(filelist))
+	for n := range filelist {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+
 	fmt.Println("Listing the blobs in the container:")
-	for name, metadata := range filelist {
+	for _, name := range names {
+		metadata := filelist[name]
 		if oldMeta, exists := registry[name]; exists && oldMeta.ContentLength != metadata.ContentLength {
 			// File exists in registry and size changed - PARTIAL READ
 			fmt.Printf("%s grew by %d bytes\n", name, metadata.ContentLength-oldMeta.ContentLength)
@@ -204,7 +170,7 @@ func doLoop(config common.Config, queue chan format.Flatevent, registry map[stri
 	// 5. Save the registry with files and sizes to a file
 	// TODO: this should only be done when the shutdown is triggered
 	if config.Resumepolicy == "timestamp" {
-		writeTimestamp(config.Timestamp, time.Now())
+		writeTimestamp(config.Timestamp, time.Now()) // TODO This should be the last processed timestamp
 	}
 	if config.Resumepolicy == "registry" {
 		saveRegistry(config.Registry, filelist)
@@ -220,8 +186,7 @@ func doLoop(config common.Config, queue chan format.Flatevent, registry map[stri
 func listFiles(resumepolicy string, connection string, last Stamp) map[string]FileMetadata {
 	config := common.ConfigHandler()
 	var filelist map[string]FileMetadata = make(map[string]FileMetadata)
-	client := getServiceClientConnectionString(config.Connection)
-
+	client := getClient(config.Connection)
 	pager := client.NewListBlobsFlatPager(config.ContainerName, &azblob.ListBlobsFlatOptions{
 		Include: azblob.ListBlobsInclude{Snapshots: false, Versions: true},
 		// include={snapshots,metadata,uncommittedblobs,copy,deleted,tags,versions,deletedwithversions,immutabilitypolicy,legalhold,permissions}
@@ -271,7 +236,7 @@ func listFiles(resumepolicy string, connection string, last Stamp) map[string]Fi
 func read(queue chan format.Flatevent, name string, oldSize int64, size int64) {
 
 	config := common.ConfigHandler()
-	client := getServiceClientConnectionString(config.Connection)
+	client := getClient(config.Connection)
 	// TODO: replace with getServiceClientSharedKey
 	//cred, err := azblob.NewSharedKeyCredential(config.Accountname, config.Accountkey)
 	//common.Error(err)
@@ -367,7 +332,7 @@ func modtime() *time.Time {
 	return &t
 }
 
-func saveRegistry(path string, filelist map[string]FileMetadata) {
+func saveRegistry(path string, filelist map[string]FileMetadata) error {
 	// resourceId=/SUBSCRIPTIONS/F5DD6E2D-1F42-4F54-B3BD-DBF595138C59/RESOURCEGROUPS/VM/PROVIDERS/MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/OCTOBER-NSG/y=2023/m=10/d=31/h=17/m=00/macAddress=002248A31CA3/PT1H.json
 	// resourceId=/SUBSCRIPTIONS/F5DD6E2D-1F42-4F54-B3BD-DBF595138C59/RESOURCEGROUPS/VM/PROVIDERS/MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/OCTOBER-NSG/y=2023/m=10/d=31/h=18/m=00/macAddress=002248A31CA3/PT1H.json
 	// y=2023/m=10/d=31/h=18/m=00/macAddress=002248A31CA3/PT1H.json
@@ -377,7 +342,7 @@ func saveRegistry(path string, filelist map[string]FileMetadata) {
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
 	err = encoder.Encode(filelist)
-	common.Error(err)
+	return err
 }
 
 // TODO Why not save this straight as a string timestamp instead of a json!?
@@ -417,35 +382,28 @@ func writeTimestamp(path string, t time.Time) error {
 
 // Package-level state and control for graceful shutdown
 var (
-	registryMu    sync.Mutex
+	mutex         sync.Mutex
 	registry      map[string]FileMetadata
 	lastStamp     Stamp
 	stopRequested bool
 	stoppedCh     chan struct{}
 )
 
-// RequestStop signals the Blobworker to stop after its current iteration.
-func RequestStop() {
+func StopAndWait() {
 	stopRequested = true
-}
-
-// WaitStopped blocks until the Blobworker has exited after a stop request.
-func WaitStopped() {
 	if stoppedCh == nil {
 		return
 	}
 	<-stoppedCh
 }
 
-// SaveState writes the current timestamp or registry to disk based on config
 func SaveState() error {
 	cfg := common.ConfigHandler()
 	if cfg.Resumepolicy == "timestamp" {
-		return writeTimestamp(cfg.Timestamp, time.Now())
+		return writeTimestamp(cfg.Timestamp, time.Now()) // TODO This should be the last processed timestamp
+	} else {
+		mutex.Lock()
+		defer mutex.Unlock()
+		return saveRegistry(cfg.Registry, registry)
 	}
-	// registry
-	registryMu.Lock()
-	defer registryMu.Unlock()
-	saveRegistry(cfg.Registry, registry)
-	return nil
 }

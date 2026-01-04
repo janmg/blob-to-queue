@@ -128,7 +128,7 @@ func ConfigHandler() Config {
 	return config
 }
 
-func configPrint(conf Config) {
+func ConfigPrint(conf Config) {
 	fmt.Println(conf.Connection)
 	fmt.Println(conf.Accountname)
 	fmt.Println(conf.Accountkey)

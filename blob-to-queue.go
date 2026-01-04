@@ -27,6 +27,15 @@ format events
 send to stream
 printing out to stdout or logfile
 */
+
+/*
+1. start output workers
+2. start taking in traffic if the workers work
+3. mark which file got processed by output worker?
+4. listen for SIGTERM, stop taking traffic in
+5. measure workers progress in processing the queue
+6. after timeout kill worker
+*/
 var config common.Config
 
 func main() {
@@ -34,39 +43,25 @@ func main() {
 	config = common.ConfigHandler()
 	//configPrint(blob)
 
+	queue := make(chan format.Flatevent, config.Qsize)
+
 	// Shutdown handler, if stop signal comes, process last messages in the queue, but stop inflow
 	//fetchmore := true
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
-	// Read flatevents from the blobstorage and add them to the queue
-	queue := make(chan format.Flatevent, config.Qsize)
-
-	// WaitGroup for output workers so we can wait for them to finish
 	var outputsWg sync.WaitGroup
-
 	go func() {
 		sig := <-sigs
 		fmt.Println(sig)
 		fmt.Println("shutdown requested — signalling input to stop")
-
-		// Signal the input worker to stop producing more events
-		input.RequestStop()
-
-		// Wait for the input worker to exit cleanly
-		input.WaitStopped()
-
+		input.StopAndWait()
 		fmt.Println("input stopped; closing queue to let outputs finish")
 		close(queue)
-
-		// Wait for all output workers to finish processing
 		outputsWg.Wait()
-
-		// Ensure final registry/timestamp is persisted
 		if err := input.SaveState(); err != nil {
 			fmt.Println("Warning: failed to save state:", err)
 		}
-
 		fmt.Println("shutdown complete — exiting")
 		os.Exit(0)
 	}()
