@@ -3,11 +3,7 @@ package input
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"os"
-	"sort"
-	"sync"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
@@ -16,176 +12,10 @@ import (
 	"janmg.com/blob-to-queue/format"
 )
 
-type Stamp struct {
-	Year   int `json:"year"`
-	Month  int `json:"month"`
-	Day    int `json:"day"`
-	Hour   int `json:"hour"`
-	Minute int `json:"minute"`
-}
-
-type FileMetadata struct {
-	ContentLength int64     `json:"content_length"`
-	ContentRead   int64     `json:"content_read"`
-	LastModified  time.Time `json:"last_modified"`
-}
-
-func Blobworker(queue chan format.Flatevent) {
-	config := common.ConfigHandler()
-
-	// Use package-level registry/last so other packages can request final save
-	mutex.Lock()
-	if registry == nil {
-		registry = make(map[string]FileMetadata)
-	}
-	mutex.Unlock()
-
-	// NSGFlowLogs grow in predictable directories and files, only need to keep a timestamp pointer to the last processed directory, other files may have arbitrary names and the registry will track which files are new and which ones have grown.
-	// https://pkg.go.dev/time
-	var last Stamp
-	if config.Resumepolicy == "timestamp" {
-		if config.Startpolicy == "start_over" {
-			fmt.Println("Starting over, clearing the timestamp")
-			last = Stamp{0, 0, 0, 0, 0}
-		} else {
-			var err error
-			last, err = readTimestamp(config.Timestamp)
-			if err != nil {
-				last = Stamp{0, 0, 0, 0, 0}
-				fmt.Println("Can't read timestamp for start_fresh, will start_over instead")
-			}
-		}
-		fmt.Printf("Resuming from timestamp: %v\n", last)
-	} else if config.Resumepolicy == "registry" {
-		// Read the registry if it exists
-		if config.Startpolicy == "start_over" {
-			fmt.Println("Starting over, clearing the registry")
-			os.Remove(config.Registry) // Delete the registry file
-			mutex.Lock()
-			registry = make(map[string]FileMetadata)
-			mutex.Unlock()
-		} else {
-			var err error
-			fmt.Println("Resuming from the registry")
-			r, err := loadRegistry("registry.json")
-			if err != nil {
-				mutex.Lock()
-				registry = make(map[string]FileMetadata)
-				mutex.Unlock()
-				fmt.Println("Can't read registry for start_fresh, will start_over instead")
-			} else {
-				mutex.Lock()
-				registry = r
-				mutex.Unlock()
-			}
-		}
-		fmt.Println("Resuming from registry")
-	}
-
-	// Initial Sync
-	doLoop(config, queue, registry, last)
-
-	// Interval is a timestamp thing, use the last processed timestamp to process the last few files
-	interval := time.NewTicker(time.Duration(config.Interval) * time.Second)
-	defer interval.Stop()
-
-	// create stopped channel to signal exit
-	stoppedCh = make(chan struct{})
-	defer func() {
-		close(stoppedCh)
-	}()
-
-	for range interval.C {
-		// stopRequested check — if requested, exit loop after current iteration
-		if stopRequested {
-			break
-		}
-		doLoop(config, queue, registry, last)
-	}
-}
-
-func doLoop(config common.Config, queue chan format.Flatevent, registry map[string]FileMetadata, last Stamp) {
-	// Should use a queue to signal that it's time to stop the ingress
-	for i := 0; len(queue) > config.Qwatermark; i++ {
-		fmt.Printf("Hit watermark, queue is at %d pause for 10 seconds", len(queue))
-		time.Sleep(10 * time.Second)
-		if i%5 == 0 {
-			fmt.Println("1 Minute and still above the queue watermark, maybe the output is not processing?")
-		}
-	}
-
-	//location := "https://" + config.Accountname + "." + config.Cloud
-	// fmt.Println(location)
-
-	// list all the nsg's
-	// resourceId=/SUBSCRIPTIONS/F5DD6E2D-1F42-4F54-B3BD-DBF595138C59/RESOURCEGROUPS/VM/PROVIDERS/MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/
-	// loop through the dates, skip the older ones and process only from the data in the registry
-	//	resourceId=/SUBSCRIPTIONS/F5DD6E2D-1F42-4F54-B3BD-DBF595138C59/RESOURCEGROUPS/VM/PROVIDERS/MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/OCTOBER-NSG/y=2023/m=10/d=31/h=13/m=00/
-	//	for each nsg
-	//	resourceId=/SUBSCRIPTIONS/F5DD6E2D-1F42-4F54-B3BD-DBF595138C59/RESOURCEGROUPS/VM/PROVIDERS/MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/
-
-	// 1. Lists all the files in the remote storage account that match the path prefix
-	var filelist map[string]FileMetadata = make(map[string]FileMetadata)
-	filelist = listFiles(config.Resumepolicy, config.Connection, last)
-	//fmt.Printf("Received filelist with %d entries\n", len(filelist))
-	var fullfiles = 0
-	var partialfiles = 0
-
-	// 2. Filters on path_filters to only include files that match the directory and file glob (**/*.json)
-	// TODO: filter on the timestamp so that only fresh files get processed
-
-	// 3. Compare the list of files to the the registry with the new filelist
-
-	// 4. Process the worklist and put all events in the logstash queue.
-
-	// Read based on modified flags
-
-	// Iterate filelist in deterministic order (sorted by filename)
-	names := make([]string, 0, len(filelist))
-	for n := range filelist {
-		names = append(names, n)
-	}
-	sort.Strings(names)
-
-	fmt.Println("Listing the blobs in the container:")
-	for _, name := range names {
-		metadata := filelist[name]
-		if oldMeta, exists := registry[name]; exists && oldMeta.ContentLength != metadata.ContentLength {
-			// File exists in registry and size changed - PARTIAL READ
-			fmt.Printf("%s grew by %d bytes\n", name, metadata.ContentLength-oldMeta.ContentLength)
-			read(queue, name, oldMeta.ContentLength, metadata.ContentLength)
-			partialfiles++
-		} else if !exists {
-			// File doesn't exist in registry - NEW FILE
-			fmt.Printf("%s is new and has %d bytes\n", name, metadata.ContentLength)
-			read(queue, name, 0, metadata.ContentLength)
-			fullfiles++
-		}
-		// If exists and size unchanged, skip processing
-	}
-	//convert to log item
-	fmt.Printf("Found %d new files and %d updated files\n", fullfiles, partialfiles)
-	// TODO: This doesn't work well? ... need to consider timestamps, fullfiles is 0 and updated files are 7 ... ???
-
-	// 5. Save the registry with files and sizes to a file
-	// TODO: this should only be done when the shutdown is triggered
-	if config.Resumepolicy == "timestamp" {
-		writeTimestamp(config.Timestamp, time.Now()) // TODO This should be the last processed timestamp
-	}
-	if config.Resumepolicy == "registry" {
-		saveRegistry(config.Registry, filelist)
-	}
-
-	// 6. if there is time left, sleep to complete the interval. If processing takes more than an inteval, save the registry and continue.
-	// ... try to sync the timer to when the files are actually written to the storage account and wait an additional 5 seconds before reading.
-	// ... did storage accounts implement some time of difference tracking journal?
-	// 7. If stop signal comes, finish the current file, save the registry and quit
-}
-
-// func listFiles(resumepolicy string, account string, key string, location string, last Stamp) map[string]FileMetadata {
-func listFiles(resumepolicy string, connection string, last Stamp) map[string]FileMetadata {
-	config := common.ConfigHandler()
-	var filelist map[string]FileMetadata = make(map[string]FileMetadata)
+// func listFiles(resumepolicy string, account string, key string, location string, last Stamp) map[string]RegistryData {
+func listFiles(resumepolicy string, connection string, last time.Time) map[string]RegistryData {
+	config := common.ConfigHandler() // TODO: why load config, if we already have resumepolicy and connection as parameter?
+	var filelist map[string]RegistryData = make(map[string]RegistryData)
 	client := getClient(config.Connection)
 	pager := client.NewListBlobsFlatPager(config.ContainerName, &azblob.ListBlobsFlatOptions{
 		Include: azblob.ListBlobsInclude{Snapshots: false, Versions: true},
@@ -208,8 +38,10 @@ func listFiles(resumepolicy string, connection string, last Stamp) map[string]Fi
 			// Filter on BlobType BlockBlob
 			fmt.Println(*blob.Name)
 			if config.Resumepolicy == "timestamp" {
-				if blob.Properties.LastModified.After(time.Date(last.Year, time.Month(last.Month), last.Day, last.Hour, last.Minute, 0, 0, time.UTC)) {
-					filelist[*blob.Name] = FileMetadata{
+				// TODO: must use updated timestamp
+				//datestamp := time.Date(last.Year, time.Month(last.Month), last.Day, last.Hour, last.Minute, 0, 0, time.UTC)
+				if blob.Properties.LastModified.After(last) {
+					filelist[*blob.Name] = RegistryData{
 						ContentLength: *blob.Properties.ContentLength,
 						ContentRead:   0,
 						LastModified:  *blob.Properties.LastModified,
@@ -220,7 +52,7 @@ func listFiles(resumepolicy string, connection string, last Stamp) map[string]Fi
 				}
 			} else {
 				// TODO: compare to registry
-				filelist[*blob.Name] = FileMetadata{
+				filelist[*blob.Name] = RegistryData{
 					ContentLength: *blob.Properties.ContentLength,
 					ContentRead:   0,
 					LastModified:  *blob.Properties.LastModified,
@@ -256,11 +88,12 @@ func read(queue chan format.Flatevent, name string, oldSize int64, size int64) {
 			Count:  size - oldSize,
 		}
 
+		// TODO: fix IfModifiedSince: &last ... this should be registry based
 		dso := &azblob.DownloadStreamOptions{
 			Range: httpRange,
 			AccessConditions: &blob.AccessConditions{
 				ModifiedAccessConditions: &blob.ModifiedAccessConditions{
-					IfModifiedSince: modtime(),
+					IfModifiedSince: &last,
 				},
 			},
 		}
@@ -307,103 +140,5 @@ func read(queue chan format.Flatevent, name string, oldSize int64, size int64) {
 	}
 	if config.Type == "vnetflowlog" {
 		vnetflowlog(queue, signal, downloadedData.Bytes(), name)
-	}
-}
-
-func loadRegistry(path string) (map[string]FileMetadata, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return make(map[string]FileMetadata), err
-	}
-	defer file.Close()
-
-	var registry map[string]FileMetadata
-	decoder := json.NewDecoder(file)
-	err = decoder.Decode(&registry)
-	if err != nil {
-		return make(map[string]FileMetadata), err
-	}
-	return registry, nil
-}
-
-// TODO: why the -24? ... is this to process one day?
-func modtime() *time.Time {
-	t := time.Now().Add(-24 * time.Hour)
-	return &t
-}
-
-func saveRegistry(path string, filelist map[string]FileMetadata) error {
-	// resourceId=/SUBSCRIPTIONS/F5DD6E2D-1F42-4F54-B3BD-DBF595138C59/RESOURCEGROUPS/VM/PROVIDERS/MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/OCTOBER-NSG/y=2023/m=10/d=31/h=17/m=00/macAddress=002248A31CA3/PT1H.json
-	// resourceId=/SUBSCRIPTIONS/F5DD6E2D-1F42-4F54-B3BD-DBF595138C59/RESOURCEGROUPS/VM/PROVIDERS/MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/OCTOBER-NSG/y=2023/m=10/d=31/h=18/m=00/macAddress=002248A31CA3/PT1H.json
-	// y=2023/m=10/d=31/h=18/m=00/macAddress=002248A31CA3/PT1H.json
-	file, err := os.Create(path)
-	common.Error(err)
-	defer file.Close()
-	encoder := json.NewEncoder(file)
-	encoder.SetIndent("", "  ")
-	err = encoder.Encode(filelist)
-	return err
-}
-
-// TODO Why not save this straight as a string timestamp instead of a json!?
-func readTimestamp(path string) (Stamp, error) {
-	var ts Stamp
-
-	file, err := os.Open(path)
-	// If the file doesn't exist, return empty timestamp
-	if os.IsNotExist(err) {
-		return ts, nil
-	}
-	common.Warning(err)
-	defer file.Close()
-
-	decoder := json.NewDecoder(file)
-	err = decoder.Decode(&ts)
-	return ts, err
-}
-
-func writeTimestamp(path string, t time.Time) error {
-	ts := Stamp{
-		Year:   t.Year(),
-		Month:  int(t.Month()),
-		Day:    t.Day(),
-		Hour:   t.Hour(),
-		Minute: t.Minute(),
-	}
-
-	file, err := os.Create(path)
-	common.Error(err)
-	defer file.Close()
-
-	encoder := json.NewEncoder(file)
-	encoder.SetIndent("", "  ")
-	return encoder.Encode(ts)
-}
-
-// Package-level state and control for graceful shutdown
-var (
-	mutex         sync.Mutex
-	registry      map[string]FileMetadata
-	lastStamp     Stamp
-	stopRequested bool
-	stoppedCh     chan struct{}
-)
-
-func StopAndWait() {
-	stopRequested = true
-	if stoppedCh == nil {
-		return
-	}
-	<-stoppedCh
-}
-
-func SaveState() error {
-	cfg := common.ConfigHandler()
-	if cfg.Resumepolicy == "timestamp" {
-		return writeTimestamp(cfg.Timestamp, time.Now()) // TODO This should be the last processed timestamp
-	} else {
-		mutex.Lock()
-		defer mutex.Unlock()
-		return saveRegistry(cfg.Registry, registry)
 	}
 }

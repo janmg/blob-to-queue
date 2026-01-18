@@ -26,7 +26,7 @@ startpolicy: "resume"
 # "resume"/ "start_over" / "start_fresh"
 resumepolicy: "timestamp"
 # "timestamp" / "registry"
-timestamp: "timestamp.json"
+timestamp: "timestamp"
 registry: "registry.dat"
 # registry_path, :validate => :string, :required => false, :default => 'data/registry.dat'
 # registry_local_path, :validate => :string, :required => false
@@ -105,6 +105,6 @@ elasticsearch:
   connection: "https://10.0.0.230:9200"
   token: "AAEAAWVsYXRmEtblE"
   format: "ecs"
-  details: ["elastic_ca.crt","vnet-", "1w"]
+  details: ["elastic_ca.crt","vnet", "1w"]
   # serviceToken, index, interval
  

@@ -34,6 +34,8 @@ func initElasticsearch() error {
 	// Prefer CA file configured in blob-to-queue.yaml -> elasticsearch.details[0]
 	config := common.ConfigHandler()
 	var cert []byte
+	indexname := "nsgflowlog"
+
 	if len(config.Elasticsearch.Details) > 0 && config.Elasticsearch.Details[0] != "" {
 		caFile := config.Elasticsearch.Details[0]
 		c, err := os.ReadFile(caFile)
@@ -45,6 +47,10 @@ func initElasticsearch() error {
 		}
 	} else {
 		cert, _ = os.ReadFile("elastic_ca.crt")
+	}
+
+	if len(config.Elasticsearch.Details) > 1 && config.Elasticsearch.Details[1] != "" {
+		indexname = config.Elasticsearch.Details[1]
 	}
 
 	// TODO: Make configurable via config.elasticsearch.connection / config.elasticsearch.token
@@ -65,20 +71,13 @@ func initElasticsearch() error {
 	var err error
 	esClient, err = elasticsearch.NewClient(cfg)
 	common.Warning(err)
-	// error creating Elasticsearch client
 
-	// Test connection
 	res, err := esClient.Info()
 	common.Warning(err)
-	// error getting Elasticsearch info
-
 	defer res.Body.Close()
-	common.Warning(err)
-	// error response from Elasticsearch
 
-	// Create bulk indexer
 	bi, err := esutil.NewBulkIndexer(esutil.BulkIndexerConfig{
-		Index:         "nsgflowlog",
+		Index:         indexname,
 		Client:        esClient,
 		NumWorkers:    4,                // Number of concurrent workers
 		FlushBytes:    1e+7,             // Flush threshold in bytes (10MB)
@@ -94,9 +93,7 @@ func initElasticsearch() error {
 			log.Println("Bulk indexer flush completed")
 		},
 	})
-
 	common.Warning(err)
-	// error creating bulk indexer
 
 	esBulkIndexer = bi
 	esInitialized = true
